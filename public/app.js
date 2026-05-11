@@ -12,7 +12,7 @@ const eventStatus = document.querySelector("#eventStatus");
 
 const controls = {
   source: document.querySelector("#source"),
-  format: document.querySelector("#format"),
+  formatSet: document.querySelector("#formatSet"),
   candidates: document.querySelector("#candidates"),
   opponents: document.querySelector("#opponents"),
   minMatches: document.querySelector("#minMatches"),
@@ -21,6 +21,7 @@ const controls = {
 
 let groupVariants = false;
 let eventsLoaded = false;
+let formatWindows = [];
 
 function percent(value) {
   return value === null || Number.isNaN(value) ? "-" : `${value.toFixed(1)}%`;
@@ -33,6 +34,18 @@ function params() {
       search.set(key, input.value);
       continue;
     }
+    if (key === "formatSet") {
+      const format = formatWindows.find((item) => item.value === input.value);
+      if (format) {
+        search.set("format", "standard");
+        search.set("rotation", format.rotation);
+        search.set("set", format.set);
+        search.set("officialFormat", format.officialFormat);
+        if (format.start) search.set("formatStart", format.start);
+        if (format.end) search.set("formatEnd", format.end);
+      }
+      continue;
+    }
     if (key === "groupVariants") {
       if (groupVariants) search.set(key, "1");
       continue;
@@ -41,18 +54,26 @@ function params() {
   }
   if (controls.source.value === "official") {
     const eventIds = [...eventOptions.querySelectorAll("input:checked")].map((input) => input.value);
+    search.set("eventScope", "selected");
     if (eventIds.length) search.set("eventIds", eventIds.join(","));
   }
   return search;
 }
 
 async function loadEvents() {
-  if (eventsLoaded) return;
+  const selectedFormat = controls.formatSet.value;
+  if (eventsLoaded === selectedFormat) return;
   eventStatus.textContent = "Loading current-format events...";
   eventOptions.innerHTML = "";
 
   try {
-    const response = await fetch("/api/events");
+    const eventParams = params();
+    eventParams.delete("source");
+    eventParams.delete("candidates");
+    eventParams.delete("opponents");
+    eventParams.delete("minMatches");
+    eventParams.delete("groupVariants");
+    const response = await fetch(`/api/events?${eventParams}`);
     const data = await response.json();
     if (!response.ok || data.error) throw new Error(data.error || "Unable to load events");
 
@@ -76,9 +97,33 @@ async function loadEvents() {
         loadRankings();
       });
     });
-    eventsLoaded = true;
+    eventsLoaded = selectedFormat;
   } catch (error) {
     eventStatus.textContent = error.message;
+  }
+}
+
+async function loadFormats() {
+  try {
+    const response = await fetch("/api/formats");
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || "Unable to load formats");
+
+    formatWindows = data.formats.map((format) => ({
+      ...format,
+      value: `${format.rotation}:${format.set}`
+    }));
+    controls.formatSet.innerHTML = formatWindows
+      .map(
+        (format, index) => `
+          <option value="${format.value}" ${format.current || index === 0 ? "selected" : ""}>
+            ${format.label}
+          </option>
+        `
+      )
+      .join("");
+  } catch (error) {
+    controls.formatSet.innerHTML = `<option value="">${error.message}</option>`;
   }
 }
 
@@ -267,6 +312,11 @@ controls.source.addEventListener("change", async () => {
   await syncSourceUi();
   loadRankings();
 });
+controls.formatSet.addEventListener("change", async () => {
+  eventsLoaded = false;
+  await syncSourceUi();
+  loadRankings();
+});
 controls.groupVariants.addEventListener("click", () => {
   groupVariants = !groupVariants;
   controls.groupVariants.textContent = groupVariants ? "On" : "Off";
@@ -274,5 +324,6 @@ controls.groupVariants.addEventListener("click", () => {
   controls.groupVariants.classList.toggle("active", groupVariants);
   loadRankings();
 });
-syncSourceUi();
+await loadFormats();
+await syncSourceUi();
 loadRankings();
