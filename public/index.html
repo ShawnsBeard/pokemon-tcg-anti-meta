@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pokemon TCG Anti Meta</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">LimitlessTCG meta analyzer</p>
+        <h1>Pokemon TCG Anti Meta</h1>
+      </div>
+      <a class="source-link" href="https://play.limitlesstcg.com/decks?game=PTCG" target="_blank" rel="noreferrer">Limitless</a>
+    </header>
+
+    <main>
+      <section class="controls" aria-label="Ranking controls">
+        <label>
+          Format
+          <select id="format">
+            <option value="">Current default</option>
+            <option value="standard">Standard</option>
+            <option value="expanded">Expanded</option>
+          </select>
+        </label>
+        <label>
+          Candidates
+          <input id="candidates" type="number" min="5" max="50" value="20">
+        </label>
+        <label>
+          Meta decks
+          <input id="opponents" type="number" min="5" max="40" value="15">
+        </label>
+        <label>
+          Min matches
+          <input id="minMatches" type="number" min="0" max="100" value="10">
+        </label>
+        <label class="toggle-label">
+          Group variants
+          <button id="groupVariants" class="toggle" type="button" aria-pressed="false">Off</button>
+        </label>
+        <button id="refresh" type="button">Refresh</button>
+      </section>
+
+      <section class="summary" aria-live="polite">
+        <div>
+          <span id="deckCount">-</span>
+          <p>ranked decks</p>
+        </div>
+        <div>
+          <span id="topScore">-</span>
+          <p>best anti-meta score</p>
+        </div>
+        <div>
+          <span id="updated">-</span>
+          <p>last updated</p>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Deck</th>
+                <th>Anti-meta</th>
+                <th>Meta share</th>
+                <th>Overall WR</th>
+                <th>Best into</th>
+                <th>Risk matchups</th>
+              </tr>
+            </thead>
+            <tbody id="rankings"></tbody>
+          </table>
+          <div id="empty" class="empty">Loading Limitless data...</div>
+        </div>
+
+        <aside class="detail" id="detail">
+          <div class="detail-empty">Select a deck to inspect matchups, finishes, and a sample list.</div>
+        </aside>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
