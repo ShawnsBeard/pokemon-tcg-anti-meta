@@ -177,12 +177,11 @@ function officialDeckListParams(searchParams = new URLSearchParams()) {
   return params;
 }
 
-function officialTournamentParams(searchParams = new URLSearchParams()) {
+function officialTournamentParams(type) {
   const params = new URLSearchParams();
   params.set("time", currentSeasonKey());
   params.set("format", "standard");
-  params.append("type", "regional");
-  params.append("type", "international");
+  params.set("type", type);
   return params;
 }
 
@@ -415,27 +414,36 @@ async function parseOfficialTournamentStats(eventIds) {
 
 export async function getOfficialEvents(requestUrl) {
   const params = new URL(requestUrl, "http://localhost").searchParams;
-  const url = new URL("/tournaments", OFFICIAL_LIMITLESS);
-  url.search = officialTournamentParams(params).toString();
-  const html = await fetchText(url);
+  const urls = ["regional", "international"].map((type) => {
+    const url = new URL("/tournaments", OFFICIAL_LIMITLESS);
+    url.search = officialTournamentParams(type).toString();
+    return url;
+  });
+  const pages = await Promise.all(urls.map((url) => fetchText(url)));
   const range = formatDateRange(params);
   const events = [];
+  const seen = new Set();
 
-  for (const row of getRows(html)) {
-    const id = row.match(/href=["']\/tournaments\/(\d+)["']/i)?.[1];
-    const date = row.match(/data-date=["']([^"']+)["']/i)?.[1];
-    const name = decodeHtml(row.match(/data-name=["']([^"']+)["']/i)?.[1] || "");
-    const format = row.match(/data-format=["']([^"']+)["']/i)?.[1];
-    const players = parseNumber(row.match(/data-players=["']([^"']*)["']/i)?.[1] || "");
-    if (!id || !name) continue;
-    if (range.start && date < range.start) continue;
-    if (range.end && date >= range.end) continue;
-    events.push({ id, name, date, format, players, url: `${OFFICIAL_LIMITLESS}/tournaments/${id}` });
+  for (const html of pages) {
+    for (const row of getRows(html)) {
+      const id = row.match(/href=["']\/tournaments\/(\d+)["']/i)?.[1];
+      const date = row.match(/data-date=["']([^"']+)["']/i)?.[1];
+      const name = decodeHtml(row.match(/data-name=["']([^"']+)["']/i)?.[1] || "");
+      const format = row.match(/data-format=["']([^"']+)["']/i)?.[1];
+      const players = parseNumber(row.match(/data-players=["']([^"']*)["']/i)?.[1] || "");
+      if (!id || !name || seen.has(id)) continue;
+      if (range.start && date < range.start) continue;
+      if (range.end && date >= range.end) continue;
+      seen.add(id);
+      events.push({ id, name, date, format, players, url: `${OFFICIAL_LIMITLESS}/tournaments/${id}` });
+    }
   }
+
+  events.sort((a, b) => b.date.localeCompare(a.date));
 
   return {
     generatedAt: new Date().toISOString(),
-    sourceUrl: `${OFFICIAL_LIMITLESS}/tournaments?${url.searchParams.toString()}`,
+    sourceUrl: urls.map((url) => `${OFFICIAL_LIMITLESS}/tournaments?${url.searchParams.toString()}`).join(" | "),
     events
   };
 }
