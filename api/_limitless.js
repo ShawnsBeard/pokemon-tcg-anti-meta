@@ -1,4 +1,5 @@
 const LIMITLESS = "https://play.limitlesstcg.com";
+const OFFICIAL_LIMITLESS = "https://limitlesstcg.com";
 const cache = new Map();
 
 function cacheKey(url) {
@@ -60,6 +61,11 @@ function normalizeUrl(href) {
   return href.startsWith("http") ? href : `${LIMITLESS}${href}`;
 }
 
+function normalizeOfficialUrl(href) {
+  if (!href) return null;
+  return href.startsWith("http") ? href : `${OFFICIAL_LIMITLESS}${href}`;
+}
+
 function getRows(html) {
   return html.match(/<tr\b[\s\S]*?<\/tr>/gi) || [];
 }
@@ -72,6 +78,13 @@ function getSpriteUrls(row) {
   return [...row.matchAll(/<img\b[^>]*class=["'][^"']*pokemon[^"']*["'][^>]*src=["']([^"']+)["'][^>]*>/gi)]
     .map((match) => decodeHtml(match[1]))
     .map((src) => (src.startsWith("http") ? src : `${LIMITLESS}${src}`));
+}
+
+function getOfficialSpriteUrls(row) {
+  return [...row.matchAll(/<img\b[^>]*src=["']([^"']+)["'][^>]*>/gi)]
+    .map((match) => decodeHtml(match[1]))
+    .filter((src) => /pokemon|deck|sprites|img/i.test(src))
+    .map((src) => (src.startsWith("http") ? src : `${OFFICIAL_LIMITLESS}${src}`));
 }
 
 function getDeckAnchor(row, options = {}) {
@@ -87,9 +100,21 @@ function getDeckAnchor(row, options = {}) {
   return null;
 }
 
+function getOfficialDeckAnchor(row) {
+  const anchors = [...row.matchAll(/<a\b[^>]*href=["']([^"']*\/decks\/[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)];
+  for (const anchor of anchors) {
+    const text = stripTags(anchor[2]);
+    const href = decodeHtml(anchor[1]);
+    if (text && /\/decks\/\d+/i.test(href)) {
+      return { name: text, slug: href.match(/\/decks\/([^/?#]+)/)?.[1], url: normalizeOfficialUrl(href) };
+    }
+  }
+  return null;
+}
+
 function cleanLimitlessParams(searchParams) {
   const params = new URLSearchParams(searchParams);
-  for (const key of ["game", "candidates", "opponents", "minMatches", "groupVariants", "groupName", "variants"]) {
+  for (const key of ["game", "candidates", "opponents", "minMatches", "groupVariants", "groupName", "variants", "source", "eventTypes"]) {
     params.delete(key);
   }
   return params;
@@ -105,10 +130,26 @@ function matchupsPath(slug, searchParams) {
 
 function limitlessDeckListParams(searchParams) {
   const params = new URLSearchParams(searchParams);
-  for (const key of ["candidates", "opponents", "minMatches", "groupVariants"]) {
+  for (const key of ["candidates", "opponents", "minMatches", "groupVariants", "source", "eventTypes"]) {
     params.delete(key);
   }
   if (!params.has("game")) params.set("game", "PTCG");
+  return params;
+}
+
+function officialDeckListParams(searchParams) {
+  const params = new URLSearchParams();
+  params.set("variants", "true");
+
+  const eventTypes = (searchParams.get("eventTypes") || "")
+    .split(",")
+    .map((type) => type.trim())
+    .filter(Boolean);
+
+  if (eventTypes.length) {
+    for (const type of eventTypes) params.append("type", type);
+  }
+
   return params;
 }
 
@@ -117,7 +158,7 @@ function effectiveDeckParams(requestParams, metaDecks) {
   const params = firstDeckUrl ? new URLSearchParams(firstDeckUrl.search) : new URLSearchParams();
 
   for (const [key, value] of requestParams.entries()) {
-    if (!["game", "candidates", "opponents", "minMatches", "groupVariants"].includes(key)) {
+    if (!["game", "candidates", "opponents", "minMatches", "groupVariants", "source", "eventTypes"].includes(key)) {
       params.set(key, value);
     }
   }
@@ -151,12 +192,19 @@ function groupKeyFromCard(cardName) {
 }
 
 function cardTokens(text) {
-  const ignored = new Set(["ex", "v", "the", "team", "mask"]);
+  const ignored = new Set(["ex", "v", "vstar", "vmax", "gx", "box", "the", "team", "mask"]);
   return text
     .toLowerCase()
     .replace(/['']/g, "")
     .split(/[^a-z0-9]+/)
     .filter((token) => token.length > 1 && !ignored.has(token));
+}
+
+function deckIdentityKey(name) {
+  return cardTokens(name)
+    .map((token) => token.replace(/s$/, ""))
+    .sort()
+    .join("-");
 }
 
 function choosePrimaryPokemon(deckName, pokemonLines) {
@@ -250,6 +298,96 @@ async function parseMetaDecks(params) {
   return [...unique.values()];
 }
 
+async function parseOfficialMetaDecks(params) {
+  const url = new URL("/decks", OFFICIAL_LIMITLESS);
+  url.search = officialDeckListParams(params).toString();
+  const html = await fetchText(url);
+  const decks = [];
+
+  for (const row of getRows(html)) {
+    const anchor = getOfficialDeckAnchor(row);
+    if (!anchor) continue;
+    const cells = getCells(row).map(stripTags).filter(Boolean);
+    const percents = cells.map(parsePercent).filter((v) => v !== null);
+    const numbers = cells.map(parseNumber).filter((v) => v !== null);
+
+    decks.push({
+      name: anchor.name,
+      slug: `official-${anchor.slug}`,
+      officialSlug: anchor.slug,
+      url: anchor.url,
+      officialDeckUrl: anchor.url,
+      sprites: getOfficialSpriteUrls(row),
+      share: percents.at(-1) ?? null,
+      points: numbers.at(-1) ?? null,
+      key: deckIdentityKey(anchor.name),
+      raw: cells
+    });
+  }
+
+  return decks;
+}
+
+function findOnlineDeck(officialDeck, onlineDecks) {
+  const key = officialDeck.key || deckIdentityKey(officialDeck.name);
+  const exact = onlineDecks.find((deck) => deckIdentityKey(deck.name) === key);
+  if (exact) return exact;
+
+  const officialTokens = new Set(cardTokens(officialDeck.name));
+  let best = null;
+
+  for (const deck of onlineDecks) {
+    const onlineTokens = cardTokens(deck.name);
+    const overlap = onlineTokens.filter((token) => officialTokens.has(token)).length;
+    const score = overlap / Math.max(officialTokens.size, onlineTokens.length, 1);
+    if (overlap && (!best || score > best.score)) best = { deck, score };
+  }
+
+  return best?.score >= 0.5 ? best.deck : null;
+}
+
+function officialMetaAsOnlineDecks(officialDecks, onlineDecks) {
+  const used = new Set();
+  const mapped = [];
+
+  for (const officialDeck of officialDecks) {
+    const onlineDeck = findOnlineDeck(officialDeck, onlineDecks);
+    if (!onlineDeck || used.has(onlineDeck.slug)) continue;
+    used.add(onlineDeck.slug);
+    mapped.push({
+      ...onlineDeck,
+      name: onlineDeck.name,
+      sourceName: officialDeck.name,
+      share: officialDeck.share,
+      sprites: officialDeck.sprites.length ? officialDeck.sprites : onlineDeck.sprites,
+      sourceDeckUrl: officialDeck.officialDeckUrl
+    });
+  }
+
+  return mapped;
+}
+
+function blendedMetaDecks(onlineDecks, officialDecks) {
+  const officialMapped = officialMetaAsOnlineDecks(officialDecks, onlineDecks);
+  const bySlug = new Map();
+
+  for (const deck of onlineDecks) {
+    bySlug.set(deck.slug, { ...deck, shareTotal: deck.share || 0, shareSources: deck.share ? 1 : 0 });
+  }
+
+  for (const deck of officialMapped) {
+    const existing = bySlug.get(deck.slug) || { ...deck, shareTotal: 0, shareSources: 0 };
+    existing.shareTotal += deck.share || 0;
+    existing.shareSources += deck.share ? 1 : 0;
+    existing.sprites = deck.sprites?.length ? deck.sprites : existing.sprites;
+    bySlug.set(deck.slug, existing);
+  }
+
+  return [...bySlug.values()]
+    .map((deck) => ({ ...deck, share: deck.shareSources ? deck.shareTotal / deck.shareSources : deck.share }))
+    .sort((a, b) => (b.share || 0) - (a.share || 0));
+}
+
 async function parseMatchups(slug, params) {
   const url = new URL(matchupsPath(slug, params), LIMITLESS);
   const html = await fetchText(url);
@@ -266,6 +404,7 @@ async function parseMatchups(slug, params) {
       opponent: anchor.name,
       opponentSlug: anchor.slug,
       opponentUrl: anchor.url,
+      sprites: getSpriteUrls(row),
       matches: numbers[0] ?? null,
       winRate: percents.at(-1) ?? null,
       raw: cells
@@ -389,16 +528,25 @@ async function groupedRankings(ranked, deckParams) {
 
 export async function getRankings(requestUrl) {
   const params = new URL(requestUrl, "http://localhost").searchParams;
+  const source = params.get("source") || "online";
   const candidates = Math.min(Number(params.get("candidates") || 20), 50);
   const opponents = Math.min(Number(params.get("opponents") || 15), 40);
   const minMatches = Math.max(Number(params.get("minMatches") || 10), 0);
   const groupVariants = params.get("groupVariants") === "1";
   const metaDecks = await parseMetaDecks(params);
+  const officialMetaDecks = source !== "online" ? await parseOfficialMetaDecks(params) : [];
+  const sourceMetaDecks =
+    source === "official"
+      ? officialMetaAsOnlineDecks(officialMetaDecks, metaDecks)
+      : source === "all"
+        ? blendedMetaDecks(metaDecks, officialMetaDecks)
+        : metaDecks;
   const deckParams = effectiveDeckParams(params, metaDecks);
   const detailParams = new URLSearchParams(deckParams);
   detailParams.set("minMatches", String(minMatches));
-  const candidateDecks = metaDecks.slice(0, candidates);
-  const metaOpponents = metaDecks.slice(0, opponents);
+  const candidateDecks = (source === "online" ? metaDecks : sourceMetaDecks).slice(0, candidates);
+  const metaOpponents = sourceMetaDecks.slice(0, opponents);
+  const sourceShares = new Map(sourceMetaDecks.map((deck) => [deck.slug, deck.share]));
 
   const ranked = await Promise.all(
     candidateDecks.map(async (deck) => {
@@ -410,6 +558,7 @@ export async function getRankings(requestUrl) {
 
       return {
         ...deck,
+        share: sourceShares.get(deck.slug) ?? deck.share,
         antiMetaScore: score.score,
         coverage: score.coverage,
         countedMatchups: score.countedMatchups,
@@ -428,8 +577,10 @@ export async function getRankings(requestUrl) {
   return {
     generatedAt: new Date().toISOString(),
     sourceUrl: `${LIMITLESS}/decks?${limitlessDeckListParams(params).toString()}`,
-    settings: { candidates, opponents, minMatches, groupVariants },
+    officialSourceUrl: source !== "online" ? `${OFFICIAL_LIMITLESS}/decks?${officialDeckListParams(params).toString()}` : null,
+    settings: { source, candidates, opponents, minMatches, groupVariants, eventTypes: params.get("eventTypes") || "" },
     metaDecks,
+    officialMetaDecks,
     decks
   };
 }

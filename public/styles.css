@@ -96,6 +96,53 @@ main {
   font-size: 13px;
 }
 
+.official-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.official-filters[hidden] {
+  display: none;
+}
+
+.official-filters div {
+  min-width: 220px;
+  margin-right: 4px;
+}
+
+.official-filters strong {
+  display: block;
+  font-size: 13px;
+}
+
+.official-filters p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.official-filters label {
+  display: inline-flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  color: #33415c;
+  text-transform: none;
+}
+
+.official-filters input {
+  width: 16px;
+  height: 16px;
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -340,10 +387,37 @@ tr[data-slug]:hover {
 .finish-row,
 .card-line {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 7px 0;
   border-bottom: 1px solid #eef1f5;
+}
+
+.matchup-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.matchup-main > span {
+  min-width: 0;
+}
+
+.matchup-main .sprites {
+  flex-shrink: 0;
+  min-width: 28px;
+}
+
+.matchup-main .sprites img {
+  width: 25px;
+  height: 25px;
+}
+
+.matchup-row strong {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .finish-row,

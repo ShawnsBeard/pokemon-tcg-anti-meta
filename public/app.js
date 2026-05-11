@@ -5,6 +5,8 @@ const refresh = document.querySelector("#refresh");
 const deckCount = document.querySelector("#deckCount");
 const topScore = document.querySelector("#topScore");
 const updated = document.querySelector("#updated");
+const sourceNote = document.querySelector("#sourceNote");
+const officialFilters = document.querySelector("#officialFilters");
 
 const controls = {
   source: document.querySelector("#source"),
@@ -24,14 +26,30 @@ function percent(value) {
 function params() {
   const search = new URLSearchParams({ game: "PTCG" });
   for (const [key, input] of Object.entries(controls)) {
-    if (key === "source") continue;
+    if (key === "source") {
+      search.set(key, input.value);
+      continue;
+    }
     if (key === "groupVariants") {
       if (groupVariants) search.set(key, "1");
       continue;
     }
     if (input.value) search.set(key, input.value);
   }
+  if (controls.source.value !== "online") {
+    const eventTypes = [...officialFilters.querySelectorAll("input:checked")].map((input) => input.value);
+    if (eventTypes.length) search.set("eventTypes", eventTypes.join(","));
+  }
   return search;
+}
+
+function syncSourceUi() {
+  const source = controls.source.value;
+  officialFilters.hidden = source === "online";
+  sourceNote.textContent =
+    source === "online"
+      ? "Current rankings use Play Limitless online tournament data."
+      : "Official source mode uses Limitless official event standings for meta-share weights and Play Limitless for matchup win rates.";
 }
 
 function spriteList(sprites = [], deckName = "") {
@@ -118,7 +136,10 @@ function matchupsTemplate(matchups) {
     .map(
       (m) => `
         <div class="matchup-row">
-          <span>${m.opponent}</span>
+          <span class="matchup-main">
+            ${spriteList(m.sprites, m.opponent)}
+            <span>${m.opponent}</span>
+          </span>
           <strong class="${m.winRate >= 52 ? "good" : m.winRate < 48 ? "bad" : ""}">${percent(m.winRate)} / ${m.matches ?? "?"}</strong>
         </div>
       `
@@ -198,6 +219,13 @@ async function loadDetail(detailUrl, name) {
 }
 
 refresh.addEventListener("click", loadRankings);
+controls.source.addEventListener("change", () => {
+  syncSourceUi();
+  loadRankings();
+});
+officialFilters.querySelectorAll("input").forEach((input) => {
+  input.addEventListener("change", loadRankings);
+});
 controls.groupVariants.addEventListener("click", () => {
   groupVariants = !groupVariants;
   controls.groupVariants.textContent = groupVariants ? "On" : "Off";
@@ -205,4 +233,5 @@ controls.groupVariants.addEventListener("click", () => {
   controls.groupVariants.classList.toggle("active", groupVariants);
   loadRankings();
 });
+syncSourceUi();
 loadRankings();
