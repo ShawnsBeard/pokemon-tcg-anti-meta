@@ -114,7 +114,7 @@ function getOfficialDeckAnchor(row) {
 
 function cleanLimitlessParams(searchParams) {
   const params = new URLSearchParams(searchParams);
-  for (const key of ["game", "candidates", "opponents", "minMatches", "groupVariants", "groupName", "variants", "source", "eventTypes"]) {
+  for (const key of ["game", "candidates", "opponents", "minMatches", "groupVariants", "groupName", "variants", "source", "eventTypes", "eventIds"]) {
     params.delete(key);
   }
   return params;
@@ -130,26 +130,42 @@ function matchupsPath(slug, searchParams) {
 
 function limitlessDeckListParams(searchParams) {
   const params = new URLSearchParams(searchParams);
-  for (const key of ["candidates", "opponents", "minMatches", "groupVariants", "source", "eventTypes"]) {
+  for (const key of ["candidates", "opponents", "minMatches", "groupVariants", "source", "eventTypes", "eventIds"]) {
     params.delete(key);
   }
   if (!params.has("game")) params.set("game", "PTCG");
   return params;
 }
 
-function officialDeckListParams(searchParams) {
+function currentSeasonKey(date = new Date()) {
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + 1;
+  const start = month >= 9 ? year : year - 1;
+  return `${String(start).slice(-2)}${String(start + 1).slice(-2)}`;
+}
+
+function officialEventIds(searchParams) {
+  return (searchParams.get("eventIds") || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => /^\d+$/.test(id));
+}
+
+function officialDeckListParams() {
   const params = new URLSearchParams();
   params.set("variants", "true");
+  params.append("type", "regional");
+  params.append("type", "international");
 
-  const eventTypes = (searchParams.get("eventTypes") || "")
-    .split(",")
-    .map((type) => type.trim())
-    .filter(Boolean);
+  return params;
+}
 
-  if (eventTypes.length) {
-    for (const type of eventTypes) params.append("type", type);
-  }
-
+function officialTournamentParams() {
+  const params = new URLSearchParams();
+  params.set("time", currentSeasonKey());
+  params.set("format", "standard");
+  params.append("type", "regional");
+  params.append("type", "international");
   return params;
 }
 
@@ -158,7 +174,7 @@ function effectiveDeckParams(requestParams, metaDecks) {
   const params = firstDeckUrl ? new URLSearchParams(firstDeckUrl.search) : new URLSearchParams();
 
   for (const [key, value] of requestParams.entries()) {
-    if (!["game", "candidates", "opponents", "minMatches", "groupVariants", "source", "eventTypes"].includes(key)) {
+    if (!["game", "candidates", "opponents", "minMatches", "groupVariants", "source", "eventTypes", "eventIds"].includes(key)) {
       params.set(key, value);
     }
   }
@@ -300,7 +316,7 @@ async function parseMetaDecks(params) {
 
 async function parseOfficialMetaDecks(params) {
   const url = new URL("/decks", OFFICIAL_LIMITLESS);
-  url.search = officialDeckListParams(params).toString();
+  url.search = officialDeckListParams().toString();
   const html = await fetchText(url);
   const decks = [];
 
@@ -326,6 +342,74 @@ async function parseOfficialMetaDecks(params) {
   }
 
   return decks;
+}
+
+async function parseOfficialTournamentStats(eventIds) {
+  const totals = new Map();
+
+  for (const id of eventIds) {
+    const url = new URL(`/tournaments/${id}/statistics`, OFFICIAL_LIMITLESS);
+    const html = await fetchText(url);
+
+    for (const row of getRows(html)) {
+      const anchor = getOfficialDeckAnchor(row);
+      if (!anchor) continue;
+      const cells = getCells(row).map(stripTags).filter(Boolean);
+      const count = Number(row.match(/data-count=["'](\d+)["']/i)?.[1] || parseNumber(cells[3]) || 0);
+      const points = Number(row.match(/data-points=["'](\d+)["']/i)?.[1] || parseNumber(cells.at(-1)) || 0);
+      const key = deckIdentityKey(anchor.name);
+      const existing = totals.get(key) || {
+        name: anchor.name,
+        slug: `official-${anchor.slug}`,
+        officialSlug: anchor.slug,
+        url: anchor.url,
+        officialDeckUrl: anchor.url,
+        sprites: getOfficialSpriteUrls(row),
+        count: 0,
+        points: 0,
+        key,
+        raw: []
+      };
+
+      existing.count += count;
+      existing.points += points;
+      if (!existing.sprites.length) existing.sprites = getOfficialSpriteUrls(row);
+      existing.raw.push(cells);
+      totals.set(key, existing);
+    }
+  }
+
+  const totalCount = [...totals.values()].reduce((sum, deck) => sum + deck.count, 0);
+
+  return [...totals.values()]
+    .map((deck) => ({
+      ...deck,
+      share: totalCount ? (deck.count / totalCount) * 100 : null
+    }))
+    .sort((a, b) => (b.share || 0) - (a.share || 0));
+}
+
+export async function getOfficialEvents(requestUrl) {
+  const params = new URL(requestUrl, "http://localhost").searchParams;
+  const url = new URL("/tournaments", OFFICIAL_LIMITLESS);
+  url.search = officialTournamentParams(params).toString();
+  const html = await fetchText(url);
+  const events = [];
+
+  for (const row of getRows(html)) {
+    const id = row.match(/href=["']\/tournaments\/(\d+)["']/i)?.[1];
+    const date = row.match(/data-date=["']([^"']+)["']/i)?.[1];
+    const name = decodeHtml(row.match(/data-name=["']([^"']+)["']/i)?.[1] || "");
+    const format = row.match(/data-format=["']([^"']+)["']/i)?.[1];
+    const players = parseNumber(row.match(/data-players=["']([^"']*)["']/i)?.[1] || "");
+    if (id && name) events.push({ id, name, date, format, players, url: `${OFFICIAL_LIMITLESS}/tournaments/${id}` });
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    sourceUrl: `${OFFICIAL_LIMITLESS}/tournaments?${url.searchParams.toString()}`,
+    events
+  };
 }
 
 function findOnlineDeck(officialDeck, onlineDecks) {
@@ -534,7 +618,13 @@ export async function getRankings(requestUrl) {
   const minMatches = Math.max(Number(params.get("minMatches") || 10), 0);
   const groupVariants = params.get("groupVariants") === "1";
   const metaDecks = await parseMetaDecks(params);
-  const officialMetaDecks = source !== "online" ? await parseOfficialMetaDecks(params) : [];
+  const selectedEventIds = officialEventIds(params);
+  const officialMetaDecks =
+    source !== "online"
+      ? selectedEventIds.length
+        ? await parseOfficialTournamentStats(selectedEventIds)
+        : await parseOfficialMetaDecks(params)
+      : [];
   const sourceMetaDecks =
     source === "official"
       ? officialMetaAsOnlineDecks(officialMetaDecks, metaDecks)
@@ -577,8 +667,8 @@ export async function getRankings(requestUrl) {
   return {
     generatedAt: new Date().toISOString(),
     sourceUrl: `${LIMITLESS}/decks?${limitlessDeckListParams(params).toString()}`,
-    officialSourceUrl: source !== "online" ? `${OFFICIAL_LIMITLESS}/decks?${officialDeckListParams(params).toString()}` : null,
-    settings: { source, candidates, opponents, minMatches, groupVariants, eventTypes: params.get("eventTypes") || "" },
+    officialSourceUrl: source !== "online" ? `${OFFICIAL_LIMITLESS}/decks?${officialDeckListParams().toString()}` : null,
+    settings: { source, candidates, opponents, minMatches, groupVariants, eventIds: selectedEventIds.join(",") },
     metaDecks,
     officialMetaDecks,
     decks

@@ -20,9 +20,9 @@
         <label>
           Source
           <select id="source">
-            <option value="online">Online tournaments</option>
-            <option value="official">Regional / city events</option>
-            <option value="all">Online + regional / city</option>
+            <option value="all">All</option>
+            <option value="official">Regionals / Internationals</option>
+            <option value="online">Online</option>
           </select>
         </label>
         <label>
@@ -53,16 +53,12 @@
       </section>
       <section id="officialFilters" class="official-filters" aria-label="Official event filters" hidden>
         <div>
-          <strong>Official event pool</strong>
-          <p>These filters change the meta-share weights. Matchup win rates still come from Play Limitless.</p>
+          <strong>Event pool</strong>
+          <p id="eventStatus">Loading current-format events...</p>
         </div>
-        <label><input type="checkbox" value="regional" checked> Regionals</label>
-        <label><input type="checkbox" value="international"> Internationals</label>
-        <label><input type="checkbox" value="regional-league"> Regional Leagues</label>
-        <label><input type="checkbox" value="champions-league"> Champions Leagues</label>
-        <label><input type="checkbox" value="online"> Official online events</label>
+        <div id="eventOptions" class="event-options"></div>
       </section>
-      <p id="sourceNote" class="source-note">Current rankings use Play Limitless online tournament data.</p>
+      <p id="sourceNote" class="source-note">All mode blends online matchup data with Regionals / Internationals meta weights.</p>
 
       <section class="summary" aria-live="polite">
         <div>

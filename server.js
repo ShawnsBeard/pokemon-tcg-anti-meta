@@ -2,7 +2,7 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getDeckDetails, getRankings } from "./api/_limitless.js";
+import { getDeckDetails, getOfficialEvents, getRankings } from "./api/_limitless.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "public");
@@ -39,6 +39,11 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === "/api/rankings") {
       await sendJson(res, await getRankings(url.toString()));
+      return;
+    }
+
+    if (url.pathname === "/api/events") {
+      await sendJson(res, await getOfficialEvents(url.toString()));
       return;
     }
 

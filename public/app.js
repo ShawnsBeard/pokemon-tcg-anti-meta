@@ -7,6 +7,8 @@ const topScore = document.querySelector("#topScore");
 const updated = document.querySelector("#updated");
 const sourceNote = document.querySelector("#sourceNote");
 const officialFilters = document.querySelector("#officialFilters");
+const eventOptions = document.querySelector("#eventOptions");
+const eventStatus = document.querySelector("#eventStatus");
 
 const controls = {
   source: document.querySelector("#source"),
@@ -18,6 +20,7 @@ const controls = {
 };
 
 let groupVariants = false;
+let eventsLoaded = false;
 
 function percent(value) {
   return value === null || Number.isNaN(value) ? "-" : `${value.toFixed(1)}%`;
@@ -36,20 +39,61 @@ function params() {
     }
     if (input.value) search.set(key, input.value);
   }
-  if (controls.source.value !== "online") {
-    const eventTypes = [...officialFilters.querySelectorAll("input:checked")].map((input) => input.value);
-    if (eventTypes.length) search.set("eventTypes", eventTypes.join(","));
+  if (controls.source.value === "official") {
+    const eventIds = [...eventOptions.querySelectorAll("input:checked")].map((input) => input.value);
+    if (eventIds.length) search.set("eventIds", eventIds.join(","));
   }
   return search;
 }
 
-function syncSourceUi() {
+async function loadEvents() {
+  if (eventsLoaded) return;
+  eventStatus.textContent = "Loading current-format events...";
+  eventOptions.innerHTML = "";
+
+  try {
+    const response = await fetch("/api/events");
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || "Unable to load events");
+
+    eventOptions.innerHTML = data.events
+      .map(
+        (event) => `
+          <label>
+            <input type="checkbox" value="${event.id}" checked>
+            ${event.name}
+          </label>
+        `
+      )
+      .join("");
+    eventStatus.textContent = data.events.length
+      ? `${data.events.length} current-format events selected`
+      : "No current-format Regionals / Internationals found.";
+    eventOptions.querySelectorAll("input").forEach((input) => {
+      input.addEventListener("change", () => {
+        const selected = eventOptions.querySelectorAll("input:checked").length;
+        eventStatus.textContent = `${selected} current-format events selected`;
+        loadRankings();
+      });
+    });
+    eventsLoaded = true;
+  } catch (error) {
+    eventStatus.textContent = error.message;
+  }
+}
+
+async function syncSourceUi() {
   const source = controls.source.value;
-  officialFilters.hidden = source === "online";
-  sourceNote.textContent =
-    source === "online"
-      ? "Current rankings use Play Limitless online tournament data."
-      : "Official source mode uses Limitless official event standings for meta-share weights and Play Limitless for matchup win rates.";
+  officialFilters.hidden = source !== "official";
+
+  if (source === "all") {
+    sourceNote.textContent = "All mode blends online matchup data with Regionals / Internationals meta weights.";
+  } else if (source === "official") {
+    sourceNote.textContent = "Regionals / Internationals mode uses selected in-person events for meta-share weights and Play Limitless for matchup win rates.";
+    await loadEvents();
+  } else {
+    sourceNote.textContent = "Online mode uses Play Limitless online tournament data.";
+  }
 }
 
 function spriteList(sprites = [], deckName = "") {
@@ -219,12 +263,9 @@ async function loadDetail(detailUrl, name) {
 }
 
 refresh.addEventListener("click", loadRankings);
-controls.source.addEventListener("change", () => {
-  syncSourceUi();
+controls.source.addEventListener("change", async () => {
+  await syncSourceUi();
   loadRankings();
-});
-officialFilters.querySelectorAll("input").forEach((input) => {
-  input.addEventListener("change", loadRankings);
 });
 controls.groupVariants.addEventListener("click", () => {
   groupVariants = !groupVariants;

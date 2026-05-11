@@ -112,7 +112,7 @@ main {
   display: none;
 }
 
-.official-filters div {
+.official-filters > div:first-child {
   min-width: 220px;
   margin-right: 4px;
 }
@@ -141,6 +141,12 @@ main {
 .official-filters input {
   width: 16px;
   height: 16px;
+}
+
+.event-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
 }
 
 label {
