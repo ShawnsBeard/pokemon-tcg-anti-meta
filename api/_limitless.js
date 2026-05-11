@@ -192,6 +192,17 @@ function formatDateRange(searchParams) {
   return { start, end };
 }
 
+async function officialTournamentFormat(id) {
+  const html = await fetchText(new URL(`/tournaments/${id}`, OFFICIAL_LIMITLESS));
+  const match = html.match(/href=["']\/decks\/\?[^"']*format=([^"&']+)[^"']*["'][^>]*>([\s\S]*?)<\/a>/i);
+  if (!match) return { code: null, label: null };
+
+  return {
+    code: decodeHtml(match[1]).toLowerCase(),
+    label: stripTags(match[2])
+  };
+}
+
 function effectiveDeckParams(requestParams, metaDecks) {
   const firstDeckUrl = metaDecks[0]?.url ? new URL(metaDecks[0].url) : null;
   const params = firstDeckUrl ? new URLSearchParams(firstDeckUrl.search) : new URLSearchParams();
@@ -414,14 +425,14 @@ async function parseOfficialTournamentStats(eventIds) {
 
 export async function getOfficialEvents(requestUrl) {
   const params = new URL(requestUrl, "http://localhost").searchParams;
+  const selectedFormat = selectedStandardFormat(params).officialFormat.toLowerCase();
   const urls = ["regional", "international"].map((type) => {
     const url = new URL("/tournaments", OFFICIAL_LIMITLESS);
     url.search = officialTournamentParams(type).toString();
     return url;
   });
   const pages = await Promise.all(urls.map((url) => fetchText(url)));
-  const range = formatDateRange(params);
-  const events = [];
+  const candidates = [];
   const seen = new Set();
 
   for (const html of pages) {
@@ -432,12 +443,19 @@ export async function getOfficialEvents(requestUrl) {
       const format = row.match(/data-format=["']([^"']+)["']/i)?.[1];
       const players = parseNumber(row.match(/data-players=["']([^"']*)["']/i)?.[1] || "");
       if (!id || !name || seen.has(id)) continue;
-      if (range.start && date < range.start) continue;
-      if (range.end && date >= range.end) continue;
       seen.add(id);
-      events.push({ id, name, date, format, players, url: `${OFFICIAL_LIMITLESS}/tournaments/${id}` });
+      candidates.push({ id, name, date, format, players, url: `${OFFICIAL_LIMITLESS}/tournaments/${id}` });
     }
   }
+
+  const events = (
+    await Promise.all(
+      candidates.map(async (event) => {
+        const eventFormat = await officialTournamentFormat(event.id);
+        return { ...event, officialFormat: eventFormat.code, formatLabel: eventFormat.label };
+      })
+    )
+  ).filter((event) => event.officialFormat === selectedFormat);
 
   events.sort((a, b) => b.date.localeCompare(a.date));
 
