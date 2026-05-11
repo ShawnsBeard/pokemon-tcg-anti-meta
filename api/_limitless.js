@@ -68,6 +68,12 @@ function getCells(row) {
   return [...row.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((m) => m[1]);
 }
 
+function getSpriteUrls(row) {
+  return [...row.matchAll(/<img\b[^>]*class=["'][^"']*pokemon[^"']*["'][^>]*src=["']([^"']+)["'][^>]*>/gi)]
+    .map((match) => decodeHtml(match[1]))
+    .map((src) => (src.startsWith("http") ? src : `${LIMITLESS}${src}`));
+}
+
 function getDeckAnchor(row, options = {}) {
   const anchors = [...row.matchAll(/<a\b[^>]*href=["']([^"']*\/decks\/[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)];
   for (const anchor of anchors) {
@@ -229,6 +235,7 @@ async function parseMetaDecks(params) {
       slug: anchor.slug,
       url: anchor.url,
       limitlessDeckUrl: anchor.url,
+      sprites: getSpriteUrls(row),
       share: parsePercent(cells[3]) ?? percents[0] ?? null,
       winRate: parsePercent(cells[5]) ?? percents.at(-1) ?? null,
       count: parseNumber(cells[2]) ?? numbers[1] ?? null,
@@ -373,6 +380,7 @@ async function groupedRankings(ranked, deckParams) {
       matchupsUrl: representative.matchupsUrl,
       detailUrl: `${representative.detailUrl}&groupName=${encodeURIComponent(group.name)}&variants=${encodeURIComponent(group.variants.map((deck) => deck.name).join("|"))}`,
       deckPageUrl: representative.deckPageUrl,
+      sprites: [...new Set(group.variants.flatMap((deck) => deck.sprites || []))].slice(0, 4),
       bestMatchups: cleanMatchups.sort((a, b) => b.winRate - a.winRate).slice(0, 4),
       worstMatchups: cleanMatchups.sort((a, b) => a.winRate - b.winRate).slice(0, 4)
     };

@@ -7,6 +7,7 @@ const topScore = document.querySelector("#topScore");
 const updated = document.querySelector("#updated");
 
 const controls = {
+  source: document.querySelector("#source"),
   format: document.querySelector("#format"),
   candidates: document.querySelector("#candidates"),
   opponents: document.querySelector("#opponents"),
@@ -23,6 +24,7 @@ function percent(value) {
 function params() {
   const search = new URLSearchParams({ game: "PTCG" });
   for (const [key, input] of Object.entries(controls)) {
+    if (key === "source") continue;
     if (key === "groupVariants") {
       if (groupVariants) search.set(key, "1");
       continue;
@@ -30,6 +32,15 @@ function params() {
     if (input.value) search.set(key, input.value);
   }
   return search;
+}
+
+function spriteList(sprites = [], deckName = "") {
+  if (!sprites.length) return "";
+  return `
+    <div class="sprites" aria-label="${deckName} main Pokemon">
+      ${sprites.map((src) => `<img src="${src}" alt="" loading="lazy">`).join("")}
+    </div>
+  `;
 }
 
 function chipList(items) {
@@ -45,10 +56,13 @@ function rowTemplate(deck, index) {
     <tr data-slug="${deck.slug}" data-name="${deck.name}" data-detail-url="${deck.detailUrl}">
       <td class="metric">#${index + 1}</td>
       <td>
-        <div class="deck-name">
-          <span>${deck.name}</span>
-          ${deck.isGrouped ? `<small>${deck.variants.length} variants grouped</small>` : ""}
-          <a href="${deck.deckPageUrl}" target="_blank" rel="noreferrer">Open Limitless deck page</a>
+        <div class="deck-cell">
+          ${spriteList(deck.sprites, deck.name)}
+          <div class="deck-name">
+            <span>${deck.name}</span>
+            ${deck.isGrouped ? `<small>${deck.variants.length} variants grouped</small>` : ""}
+            <a href="${deck.deckPageUrl}" target="_blank" rel="noreferrer">Open Limitless deck page</a>
+          </div>
         </div>
       </td>
       <td class="metric ${scoreClass}">${percent(deck.antiMetaScore)}</td>
@@ -131,49 +145,51 @@ async function loadDetail(detailUrl, name) {
 
     detail.innerHTML = `
       <h2>${name}</h2>
-      <p class="muted">Matchup spread and sample list pulled from Limitless.</p>
-      ${
-        data.groupName && data.variants.length
-          ? `<div class="variant-list"><strong>${data.groupName} variants:</strong> ${data.variants.join(", ")}</div>`
-          : ""
-      }
-      <div class="detail-actions">
-        <a class="link-button" href="${data.deckPageUrl}" target="_blank" rel="noreferrer">Deck page</a>
-        <a class="link-button" href="${data.matchupsUrl}" target="_blank" rel="noreferrer">Matchups</a>
-        ${data.finishes[0]?.decklistUrl ? `<a class="link-button" href="${data.finishes[0].decklistUrl}" target="_blank" rel="noreferrer">Sample list</a>` : ""}
-      </div>
-
-      <div class="detail-section">
-        <h3>Top Matchups</h3>
-        ${matchupsTemplate(data.matchups)}
-      </div>
-
-      <div class="detail-section">
-        <h3>Risk Matchups</h3>
-        ${riskMatchupsTemplate(data.riskMatchups)}
-      </div>
-
-      <div class="detail-section">
-        <h3>Best Finishes</h3>
+      <div class="detail-scroll">
+        <p class="muted">Matchup spread and sample list pulled from Limitless.</p>
         ${
-          data.finishes.length
-            ? data.finishes
-                .map(
-                  (finish) => `
-                    <div class="finish-row">
-                      <span>${finish.label}</span>
-                      ${finish.decklistUrl ? `<a class="external" href="${finish.decklistUrl}" target="_blank" rel="noreferrer">Decklist</a>` : ""}
-                    </div>
-                  `
-                )
-                .join("")
-            : "<p>No finish rows found.</p>"
+          data.groupName && data.variants.length
+            ? `<div class="variant-list"><strong>${data.groupName} variants:</strong> ${data.variants.join(", ")}</div>`
+            : ""
         }
-      </div>
+        <div class="detail-actions">
+          <a class="link-button" href="${data.deckPageUrl}" target="_blank" rel="noreferrer">Deck page</a>
+          <a class="link-button" href="${data.matchupsUrl}" target="_blank" rel="noreferrer">Matchups</a>
+          ${data.finishes[0]?.decklistUrl ? `<a class="link-button" href="${data.finishes[0].decklistUrl}" target="_blank" rel="noreferrer">Sample list</a>` : ""}
+        </div>
 
-      <div class="detail-section">
-        <h3>Sample Decklist</h3>
-        ${listTemplate(data.sampleDecklist, "Open the linked sample list on Limitless if this parser cannot isolate card lines.")}
+        <div class="detail-section">
+          <h3>Top Matchups</h3>
+          ${matchupsTemplate(data.matchups)}
+        </div>
+
+        <div class="detail-section">
+          <h3>Risk Matchups</h3>
+          ${riskMatchupsTemplate(data.riskMatchups)}
+        </div>
+
+        <div class="detail-section">
+          <h3>Best Finishes</h3>
+          ${
+            data.finishes.length
+              ? data.finishes
+                  .map(
+                    (finish) => `
+                      <div class="finish-row">
+                        <span>${finish.label}</span>
+                        ${finish.decklistUrl ? `<a class="external" href="${finish.decklistUrl}" target="_blank" rel="noreferrer">Decklist</a>` : ""}
+                      </div>
+                    `
+                  )
+                  .join("")
+              : "<p>No finish rows found.</p>"
+          }
+        </div>
+
+        <div class="detail-section">
+          <h3>Sample Decklist</h3>
+          ${listTemplate(data.sampleDecklist, "Open the linked sample list on Limitless if this parser cannot isolate card lines.")}
+        </div>
       </div>
     `;
   } catch (error) {

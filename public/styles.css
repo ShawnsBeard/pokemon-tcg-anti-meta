@@ -85,9 +85,15 @@ main {
 }
 
 .controls {
-  grid-template-columns: 1.5fr repeat(3, 1fr) 130px auto;
+  grid-template-columns: 1.25fr 1.25fr repeat(3, 1fr) 130px auto;
   align-items: end;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
+}
+
+.source-note {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 label {
@@ -189,6 +195,11 @@ td:nth-child(1) {
   width: 66px;
 }
 
+th:nth-child(2),
+td:nth-child(2) {
+  width: 260px;
+}
+
 th:nth-child(3),
 td:nth-child(3),
 th:nth-child(4),
@@ -210,6 +221,27 @@ tr[data-slug]:hover {
   display: grid;
   gap: 5px;
   font-weight: 850;
+}
+
+.deck-cell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.sprites {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 38px;
+}
+
+.sprites img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  image-rendering: auto;
 }
 
 .deck-name small {
@@ -261,6 +293,9 @@ tr[data-slug]:hover {
   padding: 18px;
   position: sticky;
   top: 16px;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
 }
 
 .detail h2 {
@@ -273,6 +308,12 @@ tr[data-slug]:hover {
   flex-wrap: wrap;
   gap: 8px;
   margin: 12px 0 18px;
+}
+
+.detail-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
 }
 
 .variant-list {
@@ -337,7 +378,7 @@ tr[data-slug]:hover {
   }
 
   table {
-    min-width: 860px;
+    min-width: 1120px;
   }
 }
 

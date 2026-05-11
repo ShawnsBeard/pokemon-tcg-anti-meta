@@ -18,6 +18,14 @@
     <main>
       <section class="controls" aria-label="Ranking controls">
         <label>
+          Source
+          <select id="source">
+            <option value="online">Online tournaments</option>
+            <option value="official" disabled>Regionals / City data coming</option>
+            <option value="all" disabled>All sources coming</option>
+          </select>
+        </label>
+        <label>
           Format
           <select id="format">
             <option value="">Current default</option>
@@ -43,6 +51,7 @@
         </label>
         <button id="refresh" type="button">Refresh</button>
       </section>
+      <p class="source-note">Current rankings use Play Limitless online tournament data. In-person Regional and City League support needs a separate Limitless Labs ingestion path.</p>
 
       <section class="summary" aria-live="polite">
         <div>
