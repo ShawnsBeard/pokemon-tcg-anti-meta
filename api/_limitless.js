@@ -509,6 +509,7 @@ async function parseLabsMatchups(slug, eventIds) {
       wins: matchup.wins,
       losses: matchup.losses,
       ties: matchup.ties,
+      record: { wins: matchup.wins, losses: matchup.losses, ties: matchup.ties },
       matches,
       winRate: matches ? (matchup.wins / matches) * 100 : null,
       raw: [`${matchup.wins} - ${matchup.losses} - ${matchup.ties}`]
@@ -554,6 +555,11 @@ function mergeMatchups(...sets) {
       wins: matchup.wins,
       losses: matchup.losses,
       ties: matchup.ties,
+      record: {
+        wins: Number(matchup.wins.toFixed(1)),
+        losses: Number(matchup.losses.toFixed(1)),
+        ties: Number(matchup.ties.toFixed(1))
+      },
       matches,
       winRate: matches ? (matchup.wins / matches) * 100 : null,
       raw: [`${matchup.wins.toFixed(1)} - ${matchup.losses.toFixed(1)} - ${matchup.ties.toFixed(1)}`]
@@ -721,6 +727,7 @@ async function parseMatchups(slug, params) {
       opponentSlug: anchor.slug,
       opponentUrl: anchor.url,
       sprites: getSpriteUrls(row),
+      record: cells.map(parseRecord).find(Boolean) || null,
       matches: numbers[0] ?? null,
       winRate: percents.at(-1) ?? null,
       raw: cells

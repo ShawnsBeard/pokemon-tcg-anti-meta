@@ -27,6 +27,12 @@ function percent(value) {
   return value === null || Number.isNaN(value) ? "-" : `${value.toFixed(1)}%`;
 }
 
+function matchupStat(item) {
+  const matches = item.matches ?? "?";
+  const record = item.record ? ` (${item.record.wins}-${item.record.losses}-${item.record.ties})` : "";
+  return `${percent(item.winRate)} / ${matches}${record}`;
+}
+
 function params() {
   const search = new URLSearchParams({ game: "PTCG" });
   for (const [key, input] of Object.entries(controls)) {
@@ -153,7 +159,7 @@ function spriteList(sprites = [], deckName = "") {
 function chipList(items) {
   if (!items?.length) return '<span class="chip">No data</span>';
   return items
-    .map((item) => `<span class="chip">${item.opponent} ${percent(item.winRate)} / ${item.matches ?? "?"} matches</span>`)
+    .map((item) => `<span class="chip">${item.opponent} ${matchupStat(item)}</span>`)
     .join("");
 }
 
@@ -229,7 +235,7 @@ function matchupsTemplate(matchups) {
             ${spriteList(m.sprites, m.opponent)}
             <span>${m.opponent}</span>
           </span>
-          <strong class="${m.winRate >= 52 ? "good" : m.winRate < 48 ? "bad" : ""}">${percent(m.winRate)} / ${m.matches ?? "?"}</strong>
+          <strong class="${m.winRate >= 52 ? "good" : m.winRate < 48 ? "bad" : ""}">${matchupStat(m)}</strong>
         </div>
       `
     )
