@@ -617,6 +617,13 @@ function weightedScore(deck, matchups, metaOpponents, minMatches) {
   };
 }
 
+function filteredMetaMatchups(matchups, metaOpponents, minMatches) {
+  const opponentSlugs = new Set(metaOpponents.map((opponent) => opponent.slug));
+  return matchups
+    .filter((m) => opponentSlugs.has(m.opponentSlug))
+    .filter((m) => m.winRate !== null && (m.matches === null || m.matches >= minMatches));
+}
+
 async function deckPrimaryCard(deck, params) {
   try {
     const deckHtml = await fetchText(new URL(deckPath(deck.slug, params), LIMITLESS));
@@ -733,15 +740,14 @@ export async function getRankings(requestUrl) {
   detailParams.set("minMatches", String(minMatches));
   const candidateDecks = (source === "online" ? metaDecks : sourceMetaDecks).slice(0, candidates);
   const metaOpponents = sourceMetaDecks.slice(0, opponents);
+  detailParams.set("opponentSlugs", metaOpponents.map((deck) => deck.slug).join(","));
   const sourceShares = new Map(sourceMetaDecks.map((deck) => [deck.slug, deck.share]));
 
   const ranked = await Promise.all(
     candidateDecks.map(async (deck) => {
       const matchups = await parseMatchups(deck.slug, deckParams);
       const score = weightedScore(deck, matchups, metaOpponents, minMatches);
-      const cleanMatchups = matchups
-        .filter((m) => m.winRate !== null && (m.matches === null || m.matches >= minMatches))
-        .sort((a, b) => b.winRate - a.winRate);
+      const cleanMatchups = filteredMetaMatchups(matchups, metaOpponents, minMatches).sort((a, b) => b.winRate - a.winRate);
 
       return {
         ...deck,
@@ -777,6 +783,7 @@ export async function getDeckDetails(slug, requestUrl) {
   const minMatches = Math.max(Number(params.get("minMatches") || 10), 0);
   const groupName = params.get("groupName");
   const variants = (params.get("variants") || "").split("|").filter(Boolean);
+  const opponentSlugs = (params.get("opponentSlugs") || "").split(",").filter(Boolean);
   const [deckHtml, matchups] = await Promise.all([
     fetchText(new URL(deckPath(slug, params), LIMITLESS)),
     parseMatchups(slug, params)
@@ -792,7 +799,10 @@ export async function getDeckDetails(slug, requestUrl) {
     }
   }
 
-  const cleanMatchups = matchups.filter((m) => m.winRate !== null && (m.matches === null || m.matches >= minMatches));
+  const cleanMatchups = matchups.filter((m) => {
+    if (opponentSlugs.length && !opponentSlugs.includes(m.opponentSlug)) return false;
+    return m.winRate !== null && (m.matches === null || m.matches >= minMatches);
+  });
 
   return {
     slug,
