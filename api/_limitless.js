@@ -72,6 +72,11 @@ function parseRecord(value) {
     : null;
 }
 
+function winRateWithoutTies(wins, losses) {
+  const decisive = wins + losses;
+  return decisive ? (wins / decisive) * 100 : null;
+}
+
 function normalizeUrl(href) {
   if (!href) return null;
   return href.startsWith("http") ? href : `${LIMITLESS}${href}`;
@@ -511,7 +516,7 @@ async function parseLabsMatchups(slug, eventIds) {
       ties: matchup.ties,
       record: { wins: matchup.wins, losses: matchup.losses, ties: matchup.ties },
       matches,
-      winRate: matches ? (matchup.wins / matches) * 100 : null,
+      winRate: winRateWithoutTies(matchup.wins, matchup.losses),
       raw: [`${matchup.wins} - ${matchup.losses} - ${matchup.ties}`]
     };
   });
@@ -561,7 +566,7 @@ function mergeMatchups(...sets) {
         ties: Number(matchup.ties.toFixed(1))
       },
       matches,
-      winRate: matches ? (matchup.wins / matches) * 100 : null,
+      winRate: winRateWithoutTies(matchup.wins, matchup.losses),
       raw: [`${matchup.wins.toFixed(1)} - ${matchup.losses.toFixed(1)} - ${matchup.ties.toFixed(1)}`]
     };
   });
@@ -719,6 +724,7 @@ async function parseMatchups(slug, params) {
     const anchor = getDeckAnchor(row, { allowMatchups: true });
     if (!anchor || anchor.slug === slug) continue;
     const cells = getCells(row).map(stripTags).filter(Boolean);
+    const record = cells.map(parseRecord).find(Boolean);
     const percents = cells.map(parsePercent).filter((v) => v !== null);
     const numbers = cells.map(parseNumber).filter((v) => v !== null);
 
@@ -727,9 +733,9 @@ async function parseMatchups(slug, params) {
       opponentSlug: anchor.slug,
       opponentUrl: anchor.url,
       sprites: getSpriteUrls(row),
-      record: cells.map(parseRecord).find(Boolean) || null,
+      record: record || null,
       matches: numbers[0] ?? null,
-      winRate: percents.at(-1) ?? null,
+      winRate: record ? winRateWithoutTies(record.wins, record.losses) : percents.at(-1) ?? null,
       raw: cells
     });
   }
