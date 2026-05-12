@@ -65,6 +65,13 @@ function parseNumber(value) {
   return match ? Number(match[0]) : null;
 }
 
+function parseRecord(value) {
+  const match = String(value).match(/(\d+)\s*-\s*(\d+)\s*-\s*(\d+)/);
+  return match
+    ? { wins: Number(match[1]), losses: Number(match[2]), ties: Number(match[3]) }
+    : null;
+}
+
 function normalizeUrl(href) {
   if (!href) return null;
   return href.startsWith("http") ? href : `${LIMITLESS}${href}`;
@@ -134,7 +141,7 @@ function getOfficialDeckAnchor(row) {
 
 function cleanLimitlessParams(searchParams) {
   const params = new URLSearchParams(searchParams);
-  for (const key of ["game", "candidates", "opponents", "minMatches", "groupVariants", "groupName", "variants", "source", "eventTypes", "eventIds", "eventScope", "officialFormat", "formatStart", "formatEnd"]) {
+  for (const key of ["game", "candidates", "opponents", "minMatches", "groupVariants", "groupName", "variants", "source", "eventTypes", "eventIds", "eventScope", "matchupSource", "officialFormat", "formatStart", "formatEnd"]) {
     params.delete(key);
   }
   return params;
@@ -150,7 +157,7 @@ function matchupsPath(slug, searchParams) {
 
 function limitlessDeckListParams(searchParams) {
   const params = new URLSearchParams(searchParams);
-  for (const key of ["candidates", "opponents", "minMatches", "groupVariants", "source", "eventTypes", "eventIds", "eventScope", "officialFormat", "formatStart", "formatEnd"]) {
+  for (const key of ["candidates", "opponents", "minMatches", "groupVariants", "source", "eventTypes", "eventIds", "eventScope", "matchupSource", "officialFormat", "formatStart", "formatEnd"]) {
     params.delete(key);
   }
   if (!params.has("game")) params.set("game", "PTCG");
@@ -243,7 +250,7 @@ function effectiveDeckParams(requestParams, metaDecks) {
   const params = firstDeckUrl ? new URLSearchParams(firstDeckUrl.search) : new URLSearchParams();
 
   for (const [key, value] of requestParams.entries()) {
-    if (!["game", "candidates", "opponents", "minMatches", "groupVariants", "source", "eventTypes", "eventIds", "eventScope", "officialFormat", "formatStart", "formatEnd"].includes(key)) {
+    if (!["game", "candidates", "opponents", "minMatches", "groupVariants", "source", "eventTypes", "eventIds", "eventScope", "matchupSource", "officialFormat", "formatStart", "formatEnd"].includes(key)) {
       params.set(key, value);
     }
   }
@@ -499,9 +506,57 @@ async function parseLabsMatchups(slug, eventIds) {
       opponentSlug: matchup.opponentSlug,
       opponentUrl: matchup.opponentUrl,
       sprites: matchup.sprites,
+      wins: matchup.wins,
+      losses: matchup.losses,
+      ties: matchup.ties,
       matches,
       winRate: matches ? (matchup.wins / matches) * 100 : null,
       raw: [`${matchup.wins} - ${matchup.losses} - ${matchup.ties}`]
+    };
+  });
+}
+
+function mergeMatchups(...sets) {
+  const totals = new Map();
+
+  for (const set of sets) {
+    for (const matchup of set || []) {
+      const existing = totals.get(matchup.opponentSlug) || {
+        opponent: matchup.opponent,
+        opponentSlug: matchup.opponentSlug,
+        opponentUrl: matchup.opponentUrl,
+        sprites: matchup.sprites || [],
+        wins: 0,
+        losses: 0,
+        ties: 0
+      };
+      const record = parseRecord(matchup.raw?.find((cell) => /\d+\s*-\s*\d+\s*-\s*\d+/.test(cell)));
+      const matches = matchup.matches || 0;
+      const wins = matchup.wins ?? record?.wins ?? ((matchup.winRate || 0) / 100) * matches;
+      const ties = matchup.ties ?? record?.ties ?? 0;
+      const losses = matchup.losses ?? record?.losses ?? Math.max(matches - wins - ties, 0);
+
+      existing.wins += wins;
+      existing.losses += losses;
+      existing.ties += ties;
+      if (!existing.sprites.length && matchup.sprites?.length) existing.sprites = matchup.sprites;
+      totals.set(matchup.opponentSlug, existing);
+    }
+  }
+
+  return [...totals.values()].map((matchup) => {
+    const matches = matchup.wins + matchup.losses + matchup.ties;
+    return {
+      opponent: matchup.opponent,
+      opponentSlug: matchup.opponentSlug,
+      opponentUrl: matchup.opponentUrl,
+      sprites: matchup.sprites,
+      wins: matchup.wins,
+      losses: matchup.losses,
+      ties: matchup.ties,
+      matches,
+      winRate: matches ? (matchup.wins / matches) * 100 : null,
+      raw: [`${matchup.wins.toFixed(1)} - ${matchup.losses.toFixed(1)} - ${matchup.ties.toFixed(1)}`]
     };
   });
 }
@@ -804,13 +859,18 @@ export async function getRankings(requestUrl) {
   const groupVariants = params.get("groupVariants") === "1";
   const metaDecks = await parseMetaDecks(params);
   const selectedEventIds = officialEventIds(params);
+  const automaticEventIds =
+    source === "all" && !selectedEventIds.length
+      ? (await getOfficialEvents(requestUrl)).events.map((event) => event.id)
+      : [];
+  const effectiveEventIds = selectedEventIds.length ? selectedEventIds : automaticEventIds;
   const eventScope = params.get("eventScope");
   const officialMetaDecks =
     source !== "online"
-      ? eventScope === "selected" && !selectedEventIds.length
+      ? eventScope === "selected" && !effectiveEventIds.length
         ? []
-        : selectedEventIds.length
-        ? await parseOfficialTournamentStats(selectedEventIds)
+        : effectiveEventIds.length
+        ? await parseOfficialTournamentStats(effectiveEventIds)
         : await parseOfficialMetaDecks(params)
       : [];
   const sourceMetaDecks =
@@ -822,7 +882,8 @@ export async function getRankings(requestUrl) {
   const deckParams = effectiveDeckParams(params, metaDecks);
   const detailParams = new URLSearchParams(deckParams);
   detailParams.set("minMatches", String(minMatches));
-  if (selectedEventIds.length) detailParams.set("eventIds", selectedEventIds.join(","));
+  detailParams.set("matchupSource", source);
+  if (effectiveEventIds.length) detailParams.set("eventIds", effectiveEventIds.join(","));
   const candidateDecks = (source === "online" ? metaDecks : sourceMetaDecks).slice(0, candidates);
   const metaOpponents = sourceMetaDecks.slice(0, opponents);
   detailParams.set("opponentSlugs", metaOpponents.map((deck) => deck.slug).join(","));
@@ -830,8 +891,12 @@ export async function getRankings(requestUrl) {
 
   const ranked = await Promise.all(
     candidateDecks.map(async (deck) => {
-      const eventMatchups = source !== "online" && selectedEventIds.length ? await parseLabsMatchups(deck.slug, selectedEventIds) : null;
-      const matchups = eventMatchups ?? (source !== "online" && selectedEventIds.length ? [] : await parseMatchups(deck.slug, deckParams));
+      const onlineMatchups = source !== "official" ? await parseMatchups(deck.slug, deckParams) : null;
+      const eventMatchups = source !== "online" && effectiveEventIds.length ? await parseLabsMatchups(deck.slug, effectiveEventIds) : null;
+      const matchups =
+        source === "all"
+          ? mergeMatchups(onlineMatchups, eventMatchups)
+          : eventMatchups ?? (source === "official" && effectiveEventIds.length ? [] : onlineMatchups || []);
       const score = weightedScore(deck, matchups, metaOpponents, minMatches);
       const cleanMatchups = filteredMetaMatchups(matchups, metaOpponents, minMatches, deck.slug).sort((a, b) => b.winRate - a.winRate);
 
@@ -857,7 +922,7 @@ export async function getRankings(requestUrl) {
     generatedAt: new Date().toISOString(),
     sourceUrl: `${LIMITLESS}/decks?${limitlessDeckListParams(params).toString()}`,
     officialSourceUrl: source !== "online" ? `${OFFICIAL_LIMITLESS}/decks?${officialDeckListParams(params).toString()}` : null,
-    settings: { source, candidates, opponents, minMatches, groupVariants, eventIds: selectedEventIds.join(","), ...selectedStandardFormat(params) },
+    settings: { source, candidates, opponents, minMatches, groupVariants, eventIds: effectiveEventIds.join(","), ...selectedStandardFormat(params) },
     metaDecks,
     officialMetaDecks,
     decks
@@ -871,10 +936,16 @@ export async function getDeckDetails(slug, requestUrl) {
   const variants = (params.get("variants") || "").split("|").filter(Boolean);
   const opponentSlugs = (params.get("opponentSlugs") || "").split(",").filter(Boolean);
   const eventIds = officialEventIds(params);
-  const [deckHtml, rawMatchups] = await Promise.all([
+  const matchupSource = params.get("matchupSource") || (eventIds.length ? "official" : "online");
+  const [deckHtml, onlineMatchups, eventMatchups] = await Promise.all([
     fetchText(new URL(deckPath(slug, params), LIMITLESS)),
-    eventIds.length ? parseLabsMatchups(slug, eventIds) : parseMatchups(slug, params)
+    matchupSource !== "official" ? parseMatchups(slug, params) : null,
+    matchupSource !== "online" && eventIds.length ? parseLabsMatchups(slug, eventIds) : null
   ]);
+  const rawMatchups =
+    matchupSource === "all"
+      ? mergeMatchups(onlineMatchups, eventMatchups)
+      : eventMatchups ?? (matchupSource === "official" && eventIds.length ? [] : onlineMatchups || []);
   const matchups = rawMatchups || [];
   const finishes = parseBestFinishes(deckHtml);
   let sampleDecklist = [];
