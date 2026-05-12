@@ -1,5 +1,6 @@
 const LIMITLESS = "https://play.limitlesstcg.com";
 const OFFICIAL_LIMITLESS = "https://limitlesstcg.com";
+const LABS_API = "https://mew.limitlesstcg.com/labs/data/tcg";
 const cache = new Map();
 const SET_START_DATES = {
   POR: "2026-03-27",
@@ -93,6 +94,17 @@ function getOfficialSpriteUrls(row) {
     .map((match) => decodeHtml(match[1]))
     .filter((src) => /pokemon|deck|sprites|img/i.test(src))
     .map((src) => (src.startsWith("http") ? src : `${OFFICIAL_LIMITLESS}${src}`));
+}
+
+function getLabsSpriteUrls(icons = "") {
+  return String(icons)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((icon) =>
+      icon === "substitute"
+        ? "https://limitless3.nyc3.cdn.digitaloceanspaces.com/pokemon/substitute.png"
+        : `https://r2.limitlesstcg.net/pokemon/gen9/${icon}.png`
+    );
 }
 
 function getDeckAnchor(row, options = {}) {
@@ -201,6 +213,29 @@ async function officialTournamentFormat(id) {
     code: decodeHtml(match[1]).toLowerCase(),
     label: stripTags(match[2])
   };
+}
+
+async function officialTournamentLabsId(id) {
+  const html = await fetchText(new URL(`/tournaments/${id}`, OFFICIAL_LIMITLESS));
+  return html.match(/https:\/\/labs\.limitlesstcg\.com\/(\d+)\/(?:decks|standings)/i)?.[1] || null;
+}
+
+async function fetchLabsJson(path) {
+  const url = new URL(`${LABS_API}${path}`);
+  const response = await fetch(url, {
+    headers: {
+      "user-agent": "Pokemon TCG Anti Meta (+https://limitlesstcg.com)",
+      accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Limitless Labs returned ${response.status} for ${url}`);
+  }
+
+  const data = await response.json();
+  if (!data.ok) throw new Error(data.message || `Limitless Labs returned an error for ${url}`);
+  return data.message;
 }
 
 function effectiveDeckParams(requestParams, metaDecks) {
@@ -423,6 +458,54 @@ async function parseOfficialTournamentStats(eventIds) {
     .sort((a, b) => (b.share || 0) - (a.share || 0));
 }
 
+async function parseLabsMatchups(slug, eventIds) {
+  if (!eventIds.length) return null;
+  const totals = new Map();
+  let foundAny = false;
+
+  for (const eventId of eventIds) {
+    const labsId = await officialTournamentLabsId(eventId);
+    if (!labsId) continue;
+
+    try {
+      const data = await fetchLabsJson(`/matchups?tournamentId=${labsId}&division=MA&deckId=${encodeURIComponent(slug)}&combine=1`);
+      foundAny = true;
+      for (const matchup of data.decks || []) {
+        const existing = totals.get(matchup.id) || {
+          opponent: matchup.name,
+          opponentSlug: matchup.id,
+          opponentUrl: `${LIMITLESS}/decks/${matchup.id}/matchups`,
+          sprites: getLabsSpriteUrls(matchup.icons),
+          wins: 0,
+          losses: 0,
+          ties: 0
+        };
+        existing.wins += matchup.wins || 0;
+        existing.losses += matchup.losses || 0;
+        existing.ties += matchup.ties || 0;
+        totals.set(matchup.id, existing);
+      }
+    } catch {
+      // Some newly categorized decks may not have a Labs matchup table yet.
+    }
+  }
+
+  if (!foundAny) return null;
+
+  return [...totals.values()].map((matchup) => {
+    const matches = matchup.wins + matchup.losses + matchup.ties;
+    return {
+      opponent: matchup.opponent,
+      opponentSlug: matchup.opponentSlug,
+      opponentUrl: matchup.opponentUrl,
+      sprites: matchup.sprites,
+      matches,
+      winRate: matches ? (matchup.wins / matches) * 100 : null,
+      raw: [`${matchup.wins} - ${matchup.losses} - ${matchup.ties}`]
+    };
+  });
+}
+
 export async function getOfficialEvents(requestUrl) {
   const params = new URL(requestUrl, "http://localhost").searchParams;
   const selectedFormat = selectedStandardFormat(params).officialFormat.toLowerCase();
@@ -617,9 +700,10 @@ function weightedScore(deck, matchups, metaOpponents, minMatches) {
   };
 }
 
-function filteredMetaMatchups(matchups, metaOpponents, minMatches) {
+function filteredMetaMatchups(matchups, metaOpponents, minMatches, sourceSlug = null) {
   const opponentSlugs = new Set(metaOpponents.map((opponent) => opponent.slug));
   return matchups
+    .filter((m) => m.opponentSlug !== sourceSlug)
     .filter((m) => opponentSlugs.has(m.opponentSlug))
     .filter((m) => m.winRate !== null && (m.matches === null || m.matches >= minMatches));
 }
@@ -738,6 +822,7 @@ export async function getRankings(requestUrl) {
   const deckParams = effectiveDeckParams(params, metaDecks);
   const detailParams = new URLSearchParams(deckParams);
   detailParams.set("minMatches", String(minMatches));
+  if (selectedEventIds.length) detailParams.set("eventIds", selectedEventIds.join(","));
   const candidateDecks = (source === "online" ? metaDecks : sourceMetaDecks).slice(0, candidates);
   const metaOpponents = sourceMetaDecks.slice(0, opponents);
   detailParams.set("opponentSlugs", metaOpponents.map((deck) => deck.slug).join(","));
@@ -745,9 +830,10 @@ export async function getRankings(requestUrl) {
 
   const ranked = await Promise.all(
     candidateDecks.map(async (deck) => {
-      const matchups = await parseMatchups(deck.slug, deckParams);
+      const eventMatchups = source !== "online" && selectedEventIds.length ? await parseLabsMatchups(deck.slug, selectedEventIds) : null;
+      const matchups = eventMatchups ?? (source !== "online" && selectedEventIds.length ? [] : await parseMatchups(deck.slug, deckParams));
       const score = weightedScore(deck, matchups, metaOpponents, minMatches);
-      const cleanMatchups = filteredMetaMatchups(matchups, metaOpponents, minMatches).sort((a, b) => b.winRate - a.winRate);
+      const cleanMatchups = filteredMetaMatchups(matchups, metaOpponents, minMatches, deck.slug).sort((a, b) => b.winRate - a.winRate);
 
       return {
         ...deck,
@@ -784,10 +870,12 @@ export async function getDeckDetails(slug, requestUrl) {
   const groupName = params.get("groupName");
   const variants = (params.get("variants") || "").split("|").filter(Boolean);
   const opponentSlugs = (params.get("opponentSlugs") || "").split(",").filter(Boolean);
-  const [deckHtml, matchups] = await Promise.all([
+  const eventIds = officialEventIds(params);
+  const [deckHtml, rawMatchups] = await Promise.all([
     fetchText(new URL(deckPath(slug, params), LIMITLESS)),
-    parseMatchups(slug, params)
+    eventIds.length ? parseLabsMatchups(slug, eventIds) : parseMatchups(slug, params)
   ]);
+  const matchups = rawMatchups || [];
   const finishes = parseBestFinishes(deckHtml);
   let sampleDecklist = [];
 
@@ -800,6 +888,7 @@ export async function getDeckDetails(slug, requestUrl) {
   }
 
   const cleanMatchups = matchups.filter((m) => {
+    if (m.opponentSlug === slug) return false;
     if (opponentSlugs.length && !opponentSlugs.includes(m.opponentSlug)) return false;
     return m.winRate !== null && (m.matches === null || m.matches >= minMatches);
   });
