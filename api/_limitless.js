@@ -776,6 +776,14 @@ function filteredMetaMatchups(matchups, metaOpponents, minMatches, sourceSlug = 
     .filter((m) => m.winRate !== null && (m.matches === null || m.matches >= minMatches));
 }
 
+function favorableMatchups(matchups) {
+  return matchups.filter((matchup) => matchup.winRate > 52.5).sort((a, b) => b.winRate - a.winRate);
+}
+
+function riskMatchups(matchups) {
+  return matchups.filter((matchup) => matchup.winRate < 47.5).sort((a, b) => a.winRate - b.winRate);
+}
+
 async function deckPrimaryCard(deck, params) {
   try {
     const deckHtml = await fetchText(new URL(deckPath(deck.slug, params), LIMITLESS));
@@ -857,8 +865,8 @@ async function groupedRankings(ranked, deckParams) {
       detailUrl: `${representative.detailUrl}&groupName=${encodeURIComponent(group.name)}&variants=${encodeURIComponent(group.variants.map((deck) => deck.name).join("|"))}`,
       deckPageUrl: representative.deckPageUrl,
       sprites: [...new Set(group.variants.flatMap((deck) => deck.sprites || []))].slice(0, 4),
-      bestMatchups: cleanMatchups.sort((a, b) => b.winRate - a.winRate).slice(0, 4),
-      worstMatchups: cleanMatchups.sort((a, b) => a.winRate - b.winRate).slice(0, 4)
+      bestMatchups: favorableMatchups(cleanMatchups).slice(0, 4),
+      worstMatchups: riskMatchups(cleanMatchups).slice(0, 4)
     };
   });
 }
@@ -922,8 +930,8 @@ export async function getRankings(requestUrl) {
         matchupsUrl: `${LIMITLESS}${matchupsPath(deck.slug, deckParams)}`,
         detailUrl: `/api/decks/${deck.slug}?${detailParams.toString()}`,
         deckPageUrl: `${LIMITLESS}${deckPath(deck.slug, deckParams)}`,
-        bestMatchups: cleanMatchups.slice(0, 4),
-        worstMatchups: cleanMatchups.slice(-4).reverse()
+        bestMatchups: favorableMatchups(cleanMatchups).slice(0, 4),
+        worstMatchups: riskMatchups(cleanMatchups).slice(0, 4)
       };
     })
   );
@@ -985,7 +993,7 @@ export async function getDeckDetails(slug, requestUrl) {
     matchupsUrl: `${LIMITLESS}${matchupsPath(slug, params)}`,
     finishes,
     sampleDecklist,
-    matchups: [...cleanMatchups].sort((a, b) => b.winRate - a.winRate),
-    riskMatchups: [...cleanMatchups].sort((a, b) => a.winRate - b.winRate)
+    matchups: favorableMatchups(cleanMatchups),
+    riskMatchups: riskMatchups(cleanMatchups)
   };
 }
