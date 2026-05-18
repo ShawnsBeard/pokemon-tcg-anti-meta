@@ -768,6 +768,14 @@ function weightedScore(deck, matchups, metaOpponents, minMatches) {
   };
 }
 
+function uniqueDecksBySlug(decks) {
+  const bySlug = new Map();
+  for (const deck of decks) {
+    if (deck?.slug && !bySlug.has(deck.slug)) bySlug.set(deck.slug, deck);
+  }
+  return [...bySlug.values()];
+}
+
 function filteredMetaMatchups(matchups, metaOpponents, minMatches, sourceSlug = null) {
   const opponentSlugs = new Set(metaOpponents.map((opponent) => opponent.slug));
   return matchups
@@ -907,7 +915,8 @@ export async function getRankings(requestUrl) {
   if (effectiveEventIds.length) detailParams.set("eventIds", effectiveEventIds.join(","));
   const candidateDecks = (source === "online" ? metaDecks : sourceMetaDecks).slice(0, candidates);
   const metaOpponents = sourceMetaDecks.slice(0, opponents);
-  detailParams.set("opponentSlugs", metaOpponents.map((deck) => deck.slug).join(","));
+  const displayOpponents = uniqueDecksBySlug([...metaOpponents, ...candidateDecks]);
+  detailParams.set("opponentSlugs", displayOpponents.map((deck) => deck.slug).join(","));
   const sourceShares = new Map(sourceMetaDecks.map((deck) => [deck.slug, deck.share]));
 
   const ranked = await Promise.all(
@@ -919,7 +928,7 @@ export async function getRankings(requestUrl) {
           ? mergeMatchups(onlineMatchups, eventMatchups)
           : eventMatchups ?? (source === "official" && effectiveEventIds.length ? [] : onlineMatchups || []);
       const score = weightedScore(deck, matchups, metaOpponents, minMatches);
-      const cleanMatchups = filteredMetaMatchups(matchups, metaOpponents, minMatches, deck.slug).sort((a, b) => b.winRate - a.winRate);
+      const cleanMatchups = filteredMetaMatchups(matchups, displayOpponents, minMatches, deck.slug).sort((a, b) => b.winRate - a.winRate);
 
       return {
         ...deck,
