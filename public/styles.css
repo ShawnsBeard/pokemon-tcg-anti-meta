@@ -580,6 +580,10 @@ tr[data-slug]:hover {
   font-weight: 850;
 }
 
+.setup-control {
+  margin-top: 12px;
+}
+
 .prob-table-wrap {
   overflow-x: auto;
 }

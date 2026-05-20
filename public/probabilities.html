@@ -56,6 +56,10 @@
               <p>expected mulligans</p>
             </div>
           </div>
+          <label class="setup-control">
+            Opponent mulligans
+            <input id="opponentMulligans" type="number" min="0" max="20" value="0">
+          </label>
         </aside>
       </section>
 
@@ -64,7 +68,7 @@
           <div class="panel-heading">
             <div>
               <h2>Imported Cards</h2>
-              <p>Select cards to calculate prize odds. Opening odds are shown for each row.</p>
+              <p>Select cards to calculate prize odds. Opening and post-prize draw odds are shown for each row.</p>
             </div>
             <button id="selectAllCards" type="button">Select All</button>
           </div>
@@ -76,7 +80,7 @@
                   <th>Card</th>
                   <th>Copies</th>
                   <th>Basic?</th>
-                  <th>Opening or first draw</th>
+                  <th>Opening or post-prize draws</th>
                 </tr>
               </thead>
               <tbody id="cardRows"></tbody>

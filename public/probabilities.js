@@ -9,6 +9,7 @@ const cardRows = document.querySelector("#cardRows");
 const cardEmpty = document.querySelector("#cardEmpty");
 const prizeResults = document.querySelector("#prizeResults");
 const selectAllCards = document.querySelector("#selectAllCards");
+const opponentMulligans = document.querySelector("#opponentMulligans");
 
 let cards = [];
 let allSelected = false;
@@ -130,9 +131,10 @@ async function hydrateCardMetadata() {
 function setupStats() {
   const total = cards.reduce((sum, card) => sum + card.count, 0);
   const basics = cards.reduce((sum, card) => sum + (card.isBasic ? card.count : 0), 0);
+  const opponentMulliganCount = Math.max(0, Math.floor(Number(opponentMulligans.value) || 0));
   const validOpen = total === 60 && basics ? 1 - choose(60 - basics, 7) / choose(60, 7) : null;
   const expected = validOpen ? (1 - validOpen) / validOpen : null;
-  return { total, basics, validOpen, expected };
+  return { total, basics, opponentMulliganCount, postPrizeDraws: Math.min(47, opponentMulliganCount + 1), validOpen, expected };
 }
 
 function keptHandStates(targetCopies, targetBasicCopies, basics) {
@@ -186,14 +188,28 @@ function prizeDistribution(card, basics) {
   return distribution;
 }
 
-function openingOrFirstDrawOdds(card, basics) {
-  return openingOrFirstDrawOddsForCopies(card.count, card.isBasic ? card.count : 0, basics);
+function openingOrFirstDrawOdds(card, basics, postPrizeDraws) {
+  return openingOrFirstDrawOddsForCopies(card.count, card.isBasic ? card.count : 0, basics, postPrizeDraws);
 }
 
-function openingOrFirstDrawOddsForCopies(targetCopies, targetBasicCopies, basics) {
+function postPrizeDrawOdds(targetRemaining, drawCount) {
+  const draws = Math.max(0, Math.min(47, drawCount));
+  if (!draws || !targetRemaining) return 0;
+
+  let odds = 0;
+  for (let prized = 0; prized <= Math.min(6, targetRemaining); prized += 1) {
+    const prizeWays = (choose(targetRemaining, prized) * choose(53 - targetRemaining, 6 - prized)) / choose(53, 6);
+    const targetAfterPrizes = targetRemaining - prized;
+    const missDraws = choose(47 - targetAfterPrizes, draws) / choose(47, draws);
+    odds += prizeWays * (1 - missDraws);
+  }
+  return odds;
+}
+
+function openingOrFirstDrawOddsForCopies(targetCopies, targetBasicCopies, basics, postPrizeDraws) {
   const states = keptHandStates(targetCopies, targetBasicCopies, basics);
   return states.reduce((sum, state) => {
-    const odds = state.targetInHand > 0 ? 1 : state.targetRemaining / 53;
+    const odds = state.targetInHand > 0 ? 1 : postPrizeDrawOdds(state.targetRemaining, postPrizeDraws);
     return sum + state.probability * odds;
   }, 0);
 }
@@ -211,7 +227,9 @@ function renderCards() {
   const stats = renderSetup();
   cardRows.innerHTML = cards
     .map((card) => {
-      const openingOdds = stats.total === 60 && stats.basics ? openingOrFirstDrawOdds(card, stats.basics) : null;
+      const openingOdds = stats.total === 60 && stats.basics
+        ? openingOrFirstDrawOdds(card, stats.basics, stats.postPrizeDraws)
+        : null;
       const lookupLabel = card.lookupStatus === "unknown" ? "Lookup miss" : card.isPokemon ? "Pokemon" : card.section || "Card";
       return `
         <tr>
@@ -250,13 +268,17 @@ function renderPrizeResults(stats = setupStats()) {
   const selectedCopies = selected.reduce((sum, card) => sum + card.count, 0);
   const selectedBasicCopies = selected.reduce((sum, card) => sum + (card.isBasic ? card.count : 0), 0);
   const selectedNames = selected.map((card) => card.name).join(", ");
-  const combinedOpeningOdds = openingOrFirstDrawOddsForCopies(selectedCopies, selectedBasicCopies, stats.basics);
+  const combinedOpeningOdds = openingOrFirstDrawOddsForCopies(selectedCopies, selectedBasicCopies, stats.basics, stats.postPrizeDraws);
   const combinedResult = `
     <div class="prob-card combined-prob-card">
       <h3>Any Selected Card</h3>
       <div class="prob-row">
-        <span>Opening hand or first draw</span>
+        <span>Opening hand or ${stats.postPrizeDraws} post-prize draw${stats.postPrizeDraws === 1 ? "" : "s"}</span>
         <strong>${percent(combinedOpeningOdds)}</strong>
+      </div>
+      <div class="prob-row">
+        <span>Opponent mulligans included</span>
+        <strong>${stats.opponentMulliganCount}</strong>
       </div>
       <p>${escapeHtml(selectedCopies)} total selected copies: ${escapeHtml(selectedNames)}</p>
     </div>
@@ -320,6 +342,8 @@ cardRows.addEventListener("change", (event) => {
   if (event.target.classList.contains("basic-select")) card.isBasic = event.target.checked;
   renderCards();
 });
+
+opponentMulligans.addEventListener("input", renderCards);
 
 selectAllCards.addEventListener("click", () => {
   allSelected = !allSelected;
