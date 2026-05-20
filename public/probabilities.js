@@ -187,8 +187,11 @@ function prizeDistribution(card, basics) {
 }
 
 function openingOrFirstDrawOdds(card, basics) {
-  const targetBasicCopies = card.isBasic ? card.count : 0;
-  const states = keptHandStates(card.count, targetBasicCopies, basics);
+  return openingOrFirstDrawOddsForCopies(card.count, card.isBasic ? card.count : 0, basics);
+}
+
+function openingOrFirstDrawOddsForCopies(targetCopies, targetBasicCopies, basics) {
+  const states = keptHandStates(targetCopies, targetBasicCopies, basics);
   return states.reduce((sum, state) => {
     const odds = state.targetInHand > 0 ? 1 : state.targetRemaining / 53;
     return sum + state.probability * odds;
@@ -240,11 +243,26 @@ function renderPrizeResults(stats = setupStats()) {
     return;
   }
   if (!selected.length) {
-    prizeResults.innerHTML = '<p class="muted">Select one or more cards to see prize odds.</p>';
+    prizeResults.innerHTML = '<p class="muted">Select cards to see combined opening odds and individual prize odds.</p>';
     return;
   }
 
-  prizeResults.innerHTML = selected
+  const selectedCopies = selected.reduce((sum, card) => sum + card.count, 0);
+  const selectedBasicCopies = selected.reduce((sum, card) => sum + (card.isBasic ? card.count : 0), 0);
+  const selectedNames = selected.map((card) => card.name).join(", ");
+  const combinedOpeningOdds = openingOrFirstDrawOddsForCopies(selectedCopies, selectedBasicCopies, stats.basics);
+  const combinedResult = `
+    <div class="prob-card combined-prob-card">
+      <h3>Any Selected Card</h3>
+      <div class="prob-row">
+        <span>Opening hand or first draw</span>
+        <strong>${percent(combinedOpeningOdds)}</strong>
+      </div>
+      <p>${escapeHtml(selectedCopies)} total selected copies: ${escapeHtml(selectedNames)}</p>
+    </div>
+  `;
+
+  prizeResults.innerHTML = combinedResult + selected
     .map((card) => {
       const distribution = prizeDistribution(card, stats.basics);
       const rows = distribution
@@ -270,7 +288,7 @@ parseDeck.addEventListener("click", async () => {
   cardRows.innerHTML = "";
   cardEmpty.style.display = "block";
   cardEmpty.textContent = "Parsing decklist...";
-  prizeResults.innerHTML = '<p class="muted">Select one or more cards to see prize odds.</p>';
+  prizeResults.innerHTML = '<p class="muted">Select cards to see combined opening odds and individual prize odds.</p>';
 
   try {
     cards = parseDecklist(deckInput.value);
