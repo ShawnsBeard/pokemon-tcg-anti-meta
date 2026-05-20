@@ -10,6 +10,44 @@
   --blue: #2367c8;
   --green: #16805d;
   --shadow: 0 18px 50px rgba(22, 32, 50, 0.12);
+  --topbar: linear-gradient(90deg, #162033, #26364f 52%, #842a37);
+  --control-bg: #ffffff;
+  --button-quiet-bg: #ffffff;
+  --button-quiet-ink: #22304a;
+  --toggle-bg: #e7edf6;
+  --table-head: #eef3fa;
+  --table-head-ink: #46566f;
+  --row-hover: #f8fbff;
+  --chip-bg: #eef3fa;
+  --chip-ink: #33415c;
+  --soft-panel: #f8fbff;
+  --subtle-line: #eef1f5;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #edf3ff;
+  --muted: #aab6c8;
+  --line: #334159;
+  --panel: #111827;
+  --page: #080d14;
+  --red: #ff7373;
+  --yellow: #f1c846;
+  --blue: #7db1ff;
+  --green: #4fd0a0;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+  --topbar: linear-gradient(90deg, #070b12, #142039 52%, #5f202b);
+  --control-bg: #0d1420;
+  --button-quiet-bg: #edf3ff;
+  --button-quiet-ink: #101827;
+  --toggle-bg: #1b2638;
+  --table-head: #182235;
+  --table-head-ink: #c8d4e8;
+  --row-hover: #121d2c;
+  --chip-bg: #1b2638;
+  --chip-ink: #d8e2f2;
+  --soft-panel: #0d1420;
+  --subtle-line: #263247;
 }
 
 * {
@@ -30,7 +68,7 @@ body {
   justify-content: space-between;
   gap: 24px;
   padding: 28px clamp(18px, 4vw, 56px);
-  background: linear-gradient(90deg, #162033, #26364f 52%, #842a37);
+  background: var(--topbar);
   color: white;
   border-bottom: 6px solid var(--yellow);
 }
@@ -96,8 +134,12 @@ button,
 }
 
 .source-link {
-  background: white;
-  color: #22304a;
+  background: var(--button-quiet-bg);
+  color: var(--button-quiet-ink);
+}
+
+.theme-toggle {
+  min-width: 104px;
 }
 
 main {
@@ -163,7 +205,7 @@ main {
   align-items: center;
   gap: 6px;
   min-height: 34px;
-  color: #33415c;
+  color: var(--chip-ink);
   text-transform: none;
 }
 
@@ -193,7 +235,7 @@ select {
   height: 42px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: white;
+  background: var(--control-bg);
   color: var(--ink);
   padding: 0 11px;
   font: inherit;
@@ -201,8 +243,8 @@ select {
 
 .toggle {
   width: 100%;
-  background: #e7edf6;
-  color: #33415c;
+  background: var(--toggle-bg);
+  color: var(--chip-ink);
   border: 1px solid var(--line);
 }
 
@@ -266,8 +308,8 @@ td {
 }
 
 th {
-  background: #eef3fa;
-  color: #46566f;
+  background: var(--table-head);
+  color: var(--table-head-ink);
   font-size: 12px;
   text-transform: uppercase;
 }
@@ -296,7 +338,7 @@ tr[data-slug] {
 }
 
 tr[data-slug]:hover {
-  background: #f8fbff;
+  background: var(--row-hover);
 }
 
 .deck-name {
@@ -358,8 +400,8 @@ tr[data-slug]:hover {
 
 .chip {
   border-radius: 999px;
-  background: #eef3fa;
-  color: #33415c;
+  background: var(--chip-bg);
+  color: var(--chip-ink);
   padding: 4px 8px;
   font-size: 12px;
   font-weight: 750;
@@ -402,8 +444,8 @@ tr[data-slug]:hover {
   margin: 12px 0;
   padding: 10px 12px;
   border-radius: 7px;
-  background: #eef3fa;
-  color: #33415c;
+  background: var(--chip-bg);
+  color: var(--chip-ink);
   font-size: 13px;
 }
 
@@ -426,7 +468,7 @@ tr[data-slug]:hover {
   justify-content: space-between;
   gap: 12px;
   padding: 7px 0;
-  border-bottom: 1px solid #eef1f5;
+  border-bottom: 1px solid var(--subtle-line);
 }
 
 .matchup-main {
@@ -458,7 +500,7 @@ tr[data-slug]:hover {
 .finish-row,
 .card-line {
   display: block;
-  color: #33415c;
+  color: var(--chip-ink);
 }
 
 .spinner {
@@ -514,6 +556,7 @@ tr[data-slug]:hover {
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 12px;
+  background: var(--control-bg);
   color: var(--ink);
   font: 14px/1.45 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
 }
@@ -528,7 +571,7 @@ tr[data-slug]:hover {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
-  background: #f8fbff;
+  background: var(--soft-panel);
 }
 
 .setup-grid span {
@@ -594,7 +637,7 @@ tr[data-slug]:hover {
 .prob-card h3 {
   margin: 0;
   padding: 10px 12px;
-  background: #eef3fa;
+  background: var(--table-head);
   font-size: 15px;
 }
 
@@ -603,7 +646,7 @@ tr[data-slug]:hover {
   justify-content: space-between;
   gap: 12px;
   padding: 9px 12px;
-  border-top: 1px solid #eef1f5;
+  border-top: 1px solid var(--subtle-line);
 }
 
 .prob-row strong {

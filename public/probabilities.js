@@ -24,11 +24,11 @@ function escapeHtml(value = "") {
 }
 
 function percent(value) {
-  return value === null || Number.isNaN(value) ? "-" : `${(value * 100).toFixed(3)}%`;
+  return value === null || Number.isNaN(value) ? "-" : `${(value * 100).toFixed(4)}%`;
 }
 
 function shortPercent(value) {
-  return value === null || Number.isNaN(value) ? "-" : `${(value * 100).toFixed(2)}%`;
+  return value === null || Number.isNaN(value) ? "-" : `${(value * 100).toFixed(3)}%`;
 }
 
 function choose(n, k) {
