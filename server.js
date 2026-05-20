@@ -2,7 +2,7 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getDeckDetails, getOfficialEvents, getRankings, getStandardFormats } from "./api/_limitless.js";
+import { getCardMetadata, getDeckDetails, getOfficialEvents, getRankings, getStandardFormats } from "./api/_limitless.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "public");
@@ -49,6 +49,11 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === "/api/formats") {
       await sendJson(res, await getStandardFormats());
+      return;
+    }
+
+    if (url.pathname === "/api/card-metadata") {
+      await sendJson(res, await getCardMetadata(url.toString()));
       return;
     }
 

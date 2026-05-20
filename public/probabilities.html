@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Opening Probabilities | Pokemon TCG Anti Meta</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <div class="header-meta">
+          <p class="eyebrow">LIMITLESSTCG DATA ANALYZER</p>
+          <span class="creator-tag">Created by ShawnsBeard</span>
+        </div>
+        <h1>Opening Probabilities</h1>
+      </div>
+      <nav class="header-actions" aria-label="Site navigation">
+        <a class="source-link" href="/">Anti Meta Decks</a>
+        <a class="source-link" href="https://play.limitlesstcg.com/decks?game=PTCG" target="_blank" rel="noreferrer">Limitless</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="probability-layout">
+        <div class="probability-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Paste PTCGL Decklist</h2>
+              <p>Import a 60-card list, select cards to inspect, and adjust Basic status if a lookup misses.</p>
+            </div>
+            <button id="parseDeck" type="button">Analyze</button>
+          </div>
+          <textarea id="deckInput" spellcheck="false" placeholder="Paste a Pokemon TCG Live decklist here..."></textarea>
+          <p id="deckStatus" class="source-note">Waiting for a decklist.</p>
+        </div>
+
+        <aside class="probability-panel">
+          <h2>Deck Setup</h2>
+          <div class="setup-grid">
+            <div>
+              <span id="totalCards">-</span>
+              <p>cards</p>
+            </div>
+            <div>
+              <span id="basicCount">-</span>
+              <p>Basic Pokemon</p>
+            </div>
+            <div>
+              <span id="keepOdds">-</span>
+              <p>valid opener</p>
+            </div>
+            <div>
+              <span id="expectedMulligans">-</span>
+              <p>expected mulligans</p>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="probability-workspace">
+        <div class="probability-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Imported Cards</h2>
+              <p>Select cards to calculate prize odds. Opening odds are shown for each row.</p>
+            </div>
+            <button id="selectAllCards" type="button">Select All</button>
+          </div>
+          <div class="prob-table-wrap">
+            <table class="prob-table">
+              <thead>
+                <tr>
+                  <th>Use</th>
+                  <th>Card</th>
+                  <th>Copies</th>
+                  <th>Basic?</th>
+                  <th>Opening or first draw</th>
+                </tr>
+              </thead>
+              <tbody id="cardRows"></tbody>
+            </table>
+            <div id="cardEmpty" class="empty">Paste a decklist and click Analyze.</div>
+          </div>
+        </div>
+
+        <aside class="probability-panel">
+          <h2>Prize Odds</h2>
+          <div id="prizeResults" class="prob-results">
+            <p class="muted">Select one or more cards to see odds for prizing 1, 2, 3, or more copies.</p>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script src="/probabilities.js" type="module"></script>
+  </body>
+</html>

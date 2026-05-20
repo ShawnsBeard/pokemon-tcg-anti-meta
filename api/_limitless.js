@@ -1,6 +1,7 @@
 const LIMITLESS = "https://play.limitlesstcg.com";
 const OFFICIAL_LIMITLESS = "https://limitlesstcg.com";
 const LABS_API = "https://mew.limitlesstcg.com/labs/data/tcg";
+const POKEMON_TCG_API = "https://api.pokemontcg.io/v2";
 const cache = new Map();
 const SET_START_DATES = {
   POR: "2026-03-27",
@@ -250,6 +251,28 @@ async function fetchLabsJson(path) {
   return data.message;
 }
 
+async function fetchPokemonTcgJson(path, ttlMs = 24 * 60 * 60 * 1000) {
+  const url = new URL(`${POKEMON_TCG_API}${path}`);
+  const key = cacheKey(url);
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.time < ttlMs) return hit.data;
+
+  const response = await fetch(url, {
+    headers: {
+      "user-agent": "Pokemon TCG Anti Meta (+https://pokemontcg.io)",
+      accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Pokemon TCG API returned ${response.status} for ${url}`);
+  }
+
+  const data = await response.json();
+  cache.set(key, { time: Date.now(), data });
+  return data;
+}
+
 function effectiveDeckParams(requestParams, metaDecks) {
   const firstDeckUrl = metaDecks[0]?.url ? new URL(metaDecks[0].url) : null;
   const params = firstDeckUrl ? new URLSearchParams(firstDeckUrl.search) : new URLSearchParams();
@@ -340,6 +363,77 @@ function parseDecklist(html) {
     .filter((line) => /^\d+\s+.{2,}/.test(line));
 
   return [...new Set(cardLines)].slice(0, 90);
+}
+
+function pokemonTcgQuery(params) {
+  const query = new URLSearchParams();
+  query.set("q", params.filter(Boolean).join(" "));
+  query.set("pageSize", "1");
+  return `/cards?${query.toString()}`;
+}
+
+function normalizeApiCard(card, fallback = {}) {
+  const supertype = card?.supertype || null;
+  const subtypes = card?.subtypes || [];
+  return {
+    name: card?.name || fallback.name || null,
+    setCode: fallback.setCode || card?.set?.ptcgoCode || null,
+    number: fallback.number || card?.number || null,
+    supertype,
+    subtypes,
+    isPokemon: supertype === "Pokémon" || supertype === "Pokemon",
+    isBasic: (supertype === "Pokémon" || supertype === "Pokemon") && subtypes.includes("Basic")
+  };
+}
+
+function parseLimitlessCard(html, fallback = {}) {
+  const name = stripTags(html.match(/<span class=["']card-text-name["'][^>]*>([\s\S]*?)<\/span>/i)?.[1] || "") || fallback.name || null;
+  const typeText = stripTags(html.match(/<p class=["']card-text-type["'][^>]*>([\s\S]*?)<\/p>/i)?.[1] || "");
+  const parts = typeText.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean);
+  const supertype = parts[0] || null;
+  const subtypes = parts.slice(1);
+  const isPokemon = supertype === "Pokémon" || supertype === "Pokemon";
+
+  return {
+    name,
+    setCode: fallback.setCode || null,
+    number: fallback.number || null,
+    supertype,
+    subtypes,
+    isPokemon,
+    isBasic: isPokemon && subtypes.includes("Basic")
+  };
+}
+
+export async function getCardMetadata(requestUrl) {
+  const url = new URL(requestUrl);
+  const name = (url.searchParams.get("name") || "").trim();
+  const setCode = (url.searchParams.get("set") || "").trim().toUpperCase();
+  const number = (url.searchParams.get("number") || "").trim();
+  if (!name) throw new Error("Card name is required.");
+
+  if (setCode && number) {
+    try {
+      const html = await fetchText(new URL(`/cards/${encodeURIComponent(setCode)}/${encodeURIComponent(number)}`, OFFICIAL_LIMITLESS), 24 * 60 * 60 * 1000);
+      const card = parseLimitlessCard(html, { name, setCode, number });
+      if (card.supertype) return card;
+    } catch {
+      // Fall back to the card API below for malformed or unavailable card URLs.
+    }
+  }
+
+  const queries = [];
+  if (setCode && number) queries.push([`set.ptcgoCode:${setCode}`, `number:${number}`]);
+  if (name && setCode && number) queries.push([`name:"${name.replaceAll("\"", "\\\"")}"`, `set.ptcgoCode:${setCode}`, `number:${number}`]);
+  queries.push([`name:"${name.replaceAll("\"", "\\\"")}"`]);
+
+  for (const query of queries) {
+    const data = await fetchPokemonTcgJson(pokemonTcgQuery(query));
+    const card = data.data?.[0];
+    if (card) return normalizeApiCard(card, { name, setCode, number });
+  }
+
+  return normalizeApiCard(null, { name, setCode, number });
 }
 
 function parseBestFinishes(html) {
